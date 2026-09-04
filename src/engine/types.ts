@@ -75,34 +75,54 @@ export interface MinigameScreenProps<Question, Answer> {
 }
 
 /**
- * How a round is structured.
+ * How a round is structured. Chosen per round, not per minigame — the same
+ * exercise is worth drilling both ways.
  *
- * 'time-attack' is the default and the house format: one clock for the whole
- * round, unlimited questions, points for correct answers and a penalty for
- * wrong ones. You are playing against your own best score.
+ * 'time-attack': one clock for the whole round, unlimited questions, points
+ * for correct answers and a penalty for wrong ones. Race the clock.
  *
- * 'fixed' is for exercises where rushing defeats the point — building a
- * natural deduction proof, say. A set number of questions, each with its own
- * optional clock.
+ * 'sprint': a fixed number of questions against a stopwatch. Finish them all
+ * as fast as you can; a wrong answer adds a time penalty. Race yourself.
  */
-export type RoundFormat = 'time-attack' | 'fixed'
+export type RoundFormat = 'time-attack' | 'sprint'
+
+export const ROUND_FORMATS: readonly RoundFormat[] = ['time-attack', 'sprint']
+
+export const ROUND_FORMAT_LABELS: Readonly<Record<RoundFormat, string>> = {
+  'time-attack': 'Time attack',
+  sprint: 'Sprint',
+}
+
+export const ROUND_FORMAT_BLURBS: Readonly<Record<RoundFormat, string>> = {
+  'time-attack': 'As many as you can before the clock runs out.',
+  sprint: 'Finish the set as fast as you can.',
+}
 
 /** Seconds in a time-attack round when a minigame does not say otherwise. */
 export const DEFAULT_ROUND_SECONDS = 120
 
+/** Questions in a sprint when a minigame does not say otherwise. */
+export const DEFAULT_SPRINT_QUESTIONS = 10
+
 export const SCORING = {
-  /** Awarded for a correct answer, before any combo bonus. */
+  /** time-attack: awarded for a correct answer, before any combo bonus. */
   correct: 100,
   /**
-   * Flat deduction for a wrong answer. Flat rather than scaled by partial
-   * credit: the penalty has to be felt to make rushing a real risk. Partial
-   * credit is still recorded against the topic, it just does not soften this.
+   * time-attack: flat deduction for a wrong answer. Flat rather than scaled by
+   * partial credit: the penalty has to be felt to make rushing a real risk.
+   * Partial credit is still recorded against the topic, it just does not
+   * soften this.
    */
   wrong: 50,
-  /** Added per consecutive correct answer beyond the first. */
+  /** time-attack: added per consecutive correct answer beyond the first. */
   comboStep: 25,
-  /** Ceiling on the combo bonus, so a long streak cannot run away with it. */
+  /** time-attack: ceiling on the combo bonus, so a streak cannot run away. */
   maxComboBonus: 100,
+  /**
+   * sprint: seconds added to the final time per wrong answer. Without this,
+   * the fastest strategy is to answer at random and let the count tick up.
+   */
+  sprintPenaltySeconds: 10,
 } as const
 
 export interface Minigame<Question = unknown, Answer = unknown> {
@@ -115,16 +135,14 @@ export interface Minigame<Question = unknown, Answer = unknown> {
   /** Emoji shown on the game card and party board. */
   readonly icon: string
 
-  /** Defaults to 'time-attack'. */
-  readonly format?: RoundFormat
+  /** Formats this minigame offers. Defaults to all of them. */
+  readonly formats?: readonly RoundFormat[]
 
   /** time-attack: seconds for the whole round. */
   readonly roundSeconds?: number
 
-  /** fixed: seconds per question; null means untimed. */
-  readonly secondsPerQuestion?: number | null
-  /** fixed: how many questions a round contains. */
-  readonly questionsPerRound?: number
+  /** sprint: how many questions to finish. */
+  readonly sprintQuestions?: number
 
   generate(context: GenerateContext): Question
   /** Must be pure and total — a wrong answer is a verdict, never an exception. */
@@ -156,4 +174,3 @@ export interface Minigame<Question = unknown, Answer = unknown> {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type AnyMinigame = Minigame<any, any>
 
-export const DEFAULT_QUESTIONS_PER_ROUND = 5

@@ -28,11 +28,14 @@ Three rules the codebase follows:
    The generator refuses formulas with fictitious variables or operands
    combined with themselves.
 
-## Round format
+## Round formats
 
-Time attack. One clock for the whole round, unlimited questions, and the clock
-keeps running while feedback is on screen — so reading the explanation is a
-real decision rather than a free pause.
+Chosen per round on the setup screen, not baked into the minigame — the same
+exercise is worth drilling both ways.
+
+**Time attack** — one clock for the whole round, unlimited questions. The clock
+keeps running while feedback is on screen, so reading the explanation is a real
+decision rather than a free pause.
 
 | | |
 |---|---|
@@ -40,19 +43,24 @@ real decision rather than a free pause.
 | Wrong or skipped | **−50**, flat |
 | Score floor | 0 — a bad run cannot bury the score so deep the rest stops mattering |
 
-The penalty is flat rather than scaled by partial credit: it has to be felt for
-rushing to carry real risk. Partial credit is still recorded against the topic,
-it just does not soften the hit. All four numbers live in `SCORING` in
-`src/engine/types.ts`.
+**Sprint** — a fixed set (10 by default) against a stopwatch. Finish them as
+fast as you can; each wrong answer adds **+10s** to the finishing time. Without
+that penalty the fastest strategy is to answer at random and let the counter
+tick up. The stopwatch stops the instant the last answer lands, not when you
+finish reading the feedback.
 
-Minigames where rushing defeats the point — building a natural deduction proof,
-say — can set `format: 'fixed'` instead for a set number of questions.
+The flat time-attack penalty is deliberate: it has to be felt for rushing to
+carry real risk. Partial credit is still recorded against the topic, it just
+does not soften the hit. Every number lives in `SCORING` in
+`src/engine/types.ts`.
 
 ## Leaderboard
 
-Local, and against yourself: best score per game *and* difficulty, in
-localStorage. A hard 800 is not a lesser easy 900, so they are ranked
-separately.
+Local, and against yourself: best score (time attack) and best time (sprint),
+per game *and* difficulty, in localStorage. A hard 800 is not a lesser easy
+900, so they are ranked separately. The two directions are opposite — higher
+wins one, lower wins the other — which is exactly the sort of thing that gets
+written backwards, so `src/store/progress.test.ts` pins both.
 
 **Web3Forms does not work for this**, if you were wondering. Its read API is a
 PRO feature needing a *secret* Bearer key, and a static app has nowhere to hide
@@ -72,7 +80,16 @@ into their own shadow. The palette sits in the family of the genre
 (blue `#009BD9`, yellow `#FCCF00`, red `#E62310`, green `#44AF35`) but the
 values, shapes and typeface are our own — no Nintendo assets or marks.
 
-The vocabulary lives in `src/index.css` as four classes: `.tile` (card),
+Formulas are syntax-coloured by
+[`src/ui/FormulaText.tsx`](src/ui/FormulaText.tsx): every occurrence of a
+variable gets the same colour everywhere in the app — `p` is always the same
+red — so the eye can follow one variable through a nested formula and down a
+truth table. Parentheses share one muted colour so they recede; they are
+structure, not content. The colouring runs off `tokenize`, the parser's own
+tokenizer, applied to the printer's output, so there is no second definition of
+"variable" here to drift from the grammar.
+
+The rest of the vocabulary lives in `src/index.css` as four classes: `.tile` (card),
 `.chunky` (button), `.space` (round board token), `.shout` (outlined display
 text). `.tile` deliberately sets *no* background — it is defined after
 Tailwind's utilities, so a `background` shorthand there would silently
@@ -122,6 +139,10 @@ Three things to get right:
 - **Provide `questionKey`** so a round does not deal the same question twice.
   A time-attack round asks a lot of questions and an easy pool is small, so
   without it repeats do happen — jarring, and farmable.
+
+Set `formats` if a minigame only makes sense one way; it offers both otherwise.
+Use `<FormulaText>` rather than `format()` wherever a formula is displayed, so
+it picks up the shared colouring.
 
 ## Reproducibility
 

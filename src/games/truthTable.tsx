@@ -23,6 +23,7 @@ import {
 import { defineMinigame } from '@/engine/registry'
 import type { Difficulty, GenerateContext, MinigameScreenProps, Verdict } from '@/engine/types'
 import { Button, Card } from '@/ui/primitives'
+import { FormulaText, VariableName } from '@/ui/FormulaText'
 
 export interface TruthTableQuestion {
   formula: Formula
@@ -131,16 +132,16 @@ function Screen({ question, submit, locked, solution }: MinigameScreenProps<Trut
       <p className="text-sm font-semibold uppercase tracking-widest text-ink-soft">
         Fill in the truth table
       </p>
-      <p className={`formula mt-1 leading-snug font-semibold text-balance text-ink ${formulaSize}`}>
-        {printed}
+      <p className={`mt-1 leading-snug font-semibold text-balance text-ink ${formulaSize}`}>
+        <FormulaText formula={question.formula} />
       </p>
 
       <table className="mt-4 w-full border-collapse">
         <thead>
           <tr>
             {question.variables.map((name) => (
-              <th key={name} className="formula w-10 pb-2 text-lg font-semibold text-ink-soft">
-                {name}
+              <th key={name} className="w-10 pb-2 text-lg font-semibold">
+                <VariableName name={name} />
               </th>
             ))}
             <th className="pb-2 pl-3 text-right text-xs font-semibold uppercase tracking-wider text-ink-soft">
@@ -212,11 +213,11 @@ function Screen({ question, submit, locked, solution }: MinigameScreenProps<Trut
 export const truthTableGame = defineMinigame<TruthTableQuestion, TruthTableAnswer>({
   id: 'truth-table',
   title: 'Truth Table Sprint',
-  tagline: 'Fill in the column before the clock runs out.',
+  tagline: 'Work out the column, row by row.',
   topics: ['truth-tables'],
   icon: '🧮',
-  format: 'time-attack',
   roundSeconds: 120,
+  sprintQuestions: 10,
   generate,
   check,
   solve,

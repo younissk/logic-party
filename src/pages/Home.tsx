@@ -4,6 +4,8 @@ import { DIFFICULTIES, TOPIC_LABELS } from '@/engine/types'
 import { Card, Star } from '@/ui/primitives'
 import {
   currentStreak,
+  formatDuration,
+  getBestTime,
   getHighScore,
   overallStats,
   statsForGame,
@@ -57,10 +59,14 @@ export function Home() {
         <h2 className="shout text-center text-2xl text-white">Minigames</h2>
         {MINIGAMES.map((game) => {
           const gameStats = statsForGame(game.id, progress)
-          // One card, three difficulties — show the best score of any of them.
+          // One card, three difficulties and two modes — show the best of each.
           const best = Math.max(
             ...DIFFICULTIES.map((level) => getHighScore(game.id, level, progress)),
           )
+          const times = DIFFICULTIES.map((level) => getBestTime(game.id, level, progress)).filter(
+            (time): time is number => time !== null,
+          )
+          const bestTime = times.length > 0 ? Math.min(...times) : null
           return (
             <Link key={game.id} to={`/play/${game.id}`} className="block active:translate-y-1">
               <Card className="hover:bg-card-shade">
@@ -79,10 +85,15 @@ export function Home() {
                       {gameStats.attempts > 0 &&
                         ` — ${Math.round(gameStats.accuracy * 100)}% over ${gameStats.attempts}`}
                     </p>
-                    {best > 0 && (
-                      <p className="mt-1 flex items-center gap-1 text-sm font-bold text-ink">
-                        <Star earned className="h-5 w-5" />
-                        Best {best}
+                    {(best > 0 || bestTime !== null) && (
+                      <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-bold text-ink">
+                        {best > 0 && (
+                          <span className="flex items-center gap-1">
+                            <Star earned className="h-5 w-5" />
+                            {best}
+                          </span>
+                        )}
+                        {bestTime !== null && <span>⏱ {formatDuration(bestTime)}</span>}
                       </p>
                     )}
                   </div>

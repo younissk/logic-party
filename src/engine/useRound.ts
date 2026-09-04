@@ -13,28 +13,33 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { deriveSeed, makeRng } from '@/logic'
-import { recordAttempt, submitScore } from '@/store/progress'
-import type { AnyMinigame, Difficulty, Verdict } from './types'
-import { DEFAULT_QUESTIONS_PER_ROUND, DEFAULT_ROUND_SECONDS, SCORING } from './types'
+import { recordAttempt, submitScore, submitTime } from '@/store/progress'
+import type { AnyMinigame, Difficulty, RoundFormat, Verdict } from './types'
+import { DEFAULT_ROUND_SECONDS, DEFAULT_SPRINT_QUESTIONS, SCORING } from './types'
 
 export interface RoundOptions {
   game: AnyMinigame
   difficulty: Difficulty
+  format: RoundFormat
   seed: string
+  /** Override the sprint length. */
   questionCount?: number
   /** Skip writing to the progress store — used by the party mode preview. */
   practiceOnly?: boolean
 }
 
-/** What the last answer earned, for the feedback banner. */
+/** What the last answer earned or cost, for the feedback banner. */
 export interface Award {
+  /** time-attack: points gained or lost. */
   points: number
   comboBonus: number
   combo: number
+  /** sprint: seconds added to the finishing time. */
+  penaltySeconds: number
 }
 
 export interface RoundState {
-  format: 'time-attack' | 'fixed'
+  format: RoundFormat
   index: number
   /** Null in time-attack: the round is as long as the clock allows. */
   total: number | null
@@ -42,10 +47,14 @@ export interface RoundState {
   solution: unknown
   verdict: Verdict | null
   locked: boolean
-  /** Whole-round countdown in time-attack, per-question in fixed mode. */
+  /** time-attack: whole-round countdown. Null in sprint. */
   secondsLeft: number | null
   /** Fraction of the clock remaining, 0-1. For the time bar. */
   timeFraction: number
+  /** sprint: stopwatch reading in ms, penalties included. Null in time-attack. */
+  elapsedMs: number | null
+  /** sprint: seconds added so far by wrong answers. */
+  penaltySeconds: number
   points: number
   lastAward: Award | null
   combo: number
@@ -53,8 +62,10 @@ export interface RoundState {
   answered: number
   correctCount: number
   finished: boolean
-  /** Set once the round ends, if the score beat the stored best. */
+  /** Set once the round ends, if the score or time beat the stored best. */
   isNewBest: boolean
+  /** sprint: the finishing time in ms, once the round has ended. */
+  finalMs: number | null
   error: string | null
   submit: (answer: unknown) => void
   /** Give up on this question: locks it and reveals the solution. */
@@ -66,15 +77,13 @@ export interface RoundState {
 const scoreOf = (verdict: Verdict): number => verdict.score ?? (verdict.correct ? 1 : 0)
 
 export function useRound(options: RoundOptions): RoundState {
-  const { game, difficulty, practiceOnly = false } = options
+  const { game, difficulty, format, practiceOnly = false } = options
 
-  const format = game.format ?? 'time-attack'
   const total =
-    format === 'fixed'
-      ? (options.questionCount ?? game.questionsPerRound ?? DEFAULT_QUESTIONS_PER_ROUND)
+    format === 'sprint'
+      ? (options.questionCount ?? game.sprintQuestions ?? DEFAULT_SPRINT_QUESTIONS)
       : null
   const roundSeconds = game.roundSeconds ?? DEFAULT_ROUND_SECONDS
-  const questionSeconds = game.secondsPerQuestion ?? null
 
   const [seed, setSeed] = useState(options.seed)
   const [index, setIndex] = useState(0)
@@ -89,8 +98,14 @@ export function useRound(options: RoundOptions): RoundState {
   const [isNewBest, setIsNewBest] = useState(false)
 
   const [secondsLeft, setSecondsLeft] = useState<number | null>(
-    format === 'time-attack' ? roundSeconds : questionSeconds,
+    format === 'time-attack' ? roundSeconds : null,
   )
+  const [penaltySeconds, setPenaltySeconds] = useState(0)
+  const [rawElapsedMs, setRawElapsedMs] = useState(0)
+  /** Set the instant the last sprint question is answered; also stops the watch. */
+  const [finalMs, setFinalMs] = useState<number | null>(null)
+
+  const roundStartedAt = useRef(Date.now())
 
   const reset = useCallback(
     (nextSeed: string) => {
@@ -105,9 +120,13 @@ export function useRound(options: RoundOptions): RoundState {
       setCorrectCount(0)
       setFinished(false)
       setIsNewBest(false)
-      setSecondsLeft(format === 'time-attack' ? roundSeconds : questionSeconds)
+      setSecondsLeft(format === 'time-attack' ? roundSeconds : null)
+      setPenaltySeconds(0)
+      setRawElapsedMs(0)
+      setFinalMs(null)
+      roundStartedAt.current = Date.now()
     },
-    [format, questionSeconds, roundSeconds],
+    [format, roundSeconds],
   )
 
   // A fresh seed from the caller (a new round) resets everything.
@@ -171,19 +190,21 @@ export function useRound(options: RoundOptions): RoundState {
 
   const current = dealt.entry
   const locked = verdict !== null
-  const startedAt = useRef(Date.now())
+  const questionStartedAt = useRef(Date.now())
 
-  // Fixed mode gives each question its own clock; time-attack does not.
   useEffect(() => {
-    startedAt.current = Date.now()
-    if (format === 'fixed') setSecondsLeft(questionSeconds)
-  }, [index, format, questionSeconds, seed])
+    questionStartedAt.current = Date.now()
+  }, [index, seed])
 
   const endRound = useCallback(
-    (finalPoints: number) => {
+    (finalPoints: number, finishingMs: number | null) => {
       setFinished(true)
-      if (format === 'time-attack' && !practiceOnly) {
+      if (practiceOnly) return
+
+      if (format === 'time-attack') {
         setIsNewBest(submitScore(game.id, difficulty, finalPoints))
+      } else if (finishingMs !== null) {
+        setIsNewBest(submitTime(game.id, difficulty, finishingMs))
       }
     },
     [difficulty, format, game.id, practiceOnly],
@@ -197,16 +218,28 @@ export function useRound(options: RoundOptions): RoundState {
         ? Math.min(SCORING.maxComboBonus, Math.max(0, nextCombo - 1) * SCORING.comboStep)
         : 0
       const delta = result.correct ? SCORING.correct + comboBonus : -SCORING.wrong
+      const penalty = format === 'sprint' && !result.correct ? SCORING.sprintPenaltySeconds : 0
 
       setVerdict(result)
-      setLastAward({ points: delta, comboBonus, combo: nextCombo })
+      setLastAward({ points: delta, comboBonus, combo: nextCombo, penaltySeconds: penalty })
       setCombo(nextCombo)
       setBestCombo((previous) => Math.max(previous, nextCombo))
-      setAnswered((previous) => previous + 1)
       if (result.correct) setCorrectCount((previous) => previous + 1)
       // Clamped at zero: a run of bad luck should not bury the score so deep
       // that the rest of the round stops mattering.
       setPoints((previous) => Math.max(0, previous + delta))
+
+      const totalPenalty = penaltySeconds + penalty
+      if (penalty > 0) setPenaltySeconds(totalPenalty)
+
+      const answeredNow = answered + 1
+      setAnswered(answeredNow)
+
+      // The stopwatch stops the moment the last answer lands, not when the
+      // player finishes reading the feedback.
+      if (format === 'sprint' && total !== null && answeredNow >= total) {
+        setFinalMs(Date.now() - roundStartedAt.current + totalPenalty * 1000)
+      }
 
       if (!practiceOnly) {
         recordAttempt({
@@ -218,37 +251,48 @@ export function useRound(options: RoundOptions): RoundState {
           seed,
           questionIndex: index,
           at: Date.now(),
-          ms: Date.now() - startedAt.current,
+          ms: Date.now() - questionStartedAt.current,
         })
       }
     },
-    [combo, difficulty, game.id, game.topics, index, practiceOnly, seed],
+    [
+      answered,
+      combo,
+      difficulty,
+      format,
+      game.id,
+      game.topics,
+      index,
+      penaltySeconds,
+      practiceOnly,
+      seed,
+      total,
+    ],
   )
 
-  // The clock. In time-attack it keeps running while feedback is on screen.
+  // time-attack: the countdown, which keeps running while feedback is up.
   useEffect(() => {
-    if (secondsLeft === null || finished) return
-    if (format === 'fixed' && locked) return
-
+    if (format !== 'time-attack' || finished) return
     const timer = window.setInterval(() => {
       setSecondsLeft((remaining) => (remaining === null ? null : Math.max(0, remaining - 1)))
     }, 1000)
-
     return () => window.clearInterval(timer)
-  }, [format, locked, finished, secondsLeft === null, index])
+  }, [format, finished])
+
+  // sprint: the stopwatch, stopped once the last answer has landed.
+  useEffect(() => {
+    if (format !== 'sprint' || finished || finalMs !== null) return
+    const timer = window.setInterval(() => {
+      setRawElapsedMs(Date.now() - roundStartedAt.current)
+    }, 100)
+    return () => window.clearInterval(timer)
+  }, [format, finished, finalMs])
 
   // Kept out of the tick so the end-of-clock effect runs exactly once.
   useEffect(() => {
-    if (secondsLeft !== 0 || finished) return
-
-    if (format === 'time-attack') {
-      endRound(points)
-      return
-    }
-    if (!locked && current) {
-      finish({ correct: false, message: 'Out of time', score: 0 })
-    }
-  }, [secondsLeft, finished, format, locked, current, finish, endRound, points])
+    if (format !== 'time-attack' || secondsLeft !== 0 || finished) return
+    endRound(points, null)
+  }, [secondsLeft, finished, format, endRound, points])
 
   const submit = useCallback(
     (answer: unknown) => {
@@ -266,17 +310,25 @@ export function useRound(options: RoundOptions): RoundState {
 
   const reveal = useCallback(() => {
     if (locked || finished || !current) return
-    finish({ correct: false, message: 'Skipped', detail: 'A skip counts as a wrong answer.', score: 0 })
-  }, [current, finish, finished, locked])
+    finish({
+      correct: false,
+      message: 'Skipped',
+      detail:
+        format === 'sprint'
+          ? `A skip counts as wrong: +${SCORING.sprintPenaltySeconds}s.`
+          : 'A skip counts as a wrong answer.',
+      score: 0,
+    })
+  }, [current, finish, finished, format, locked])
 
   const next = useCallback(() => {
     if (total !== null && index + 1 >= total) {
-      endRound(points)
+      endRound(points, finalMs)
       return
     }
     setIndex((previous) => previous + 1)
     setVerdict(null)
-  }, [endRound, index, points, total])
+  }, [endRound, finalMs, index, points, total])
 
   const restart = useCallback(
     (nextSeed?: string) => {
@@ -285,7 +337,8 @@ export function useRound(options: RoundOptions): RoundState {
     [reset, seed],
   )
 
-  const clockLength = format === 'time-attack' ? roundSeconds : (questionSeconds ?? 0)
+  const elapsedMs =
+    format === 'sprint' ? (finalMs ?? rawElapsedMs + penaltySeconds * 1000) : null
 
   return {
     format,
@@ -296,7 +349,9 @@ export function useRound(options: RoundOptions): RoundState {
     verdict,
     locked,
     secondsLeft,
-    timeFraction: clockLength > 0 && secondsLeft !== null ? secondsLeft / clockLength : 1,
+    timeFraction: format === 'time-attack' && secondsLeft !== null ? secondsLeft / roundSeconds : 1,
+    elapsedMs,
+    penaltySeconds,
     points,
     lastAward,
     combo,
@@ -305,6 +360,7 @@ export function useRound(options: RoundOptions): RoundState {
     correctCount,
     finished,
     isNewBest,
+    finalMs,
     error: dealt.error,
     submit,
     reveal,

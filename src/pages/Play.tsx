@@ -1,15 +1,24 @@
 import { Link, useParams, useSearchParams } from 'react-router-dom'
 import { getMinigame } from '@/engine/registry'
 import { RoundScreen } from '@/engine/RoundScreen'
-import { DIFFICULTIES } from '@/engine/types'
-import type { Difficulty } from '@/engine/types'
+import {
+  DEFAULT_ROUND_SECONDS,
+  DEFAULT_SPRINT_QUESTIONS,
+  DIFFICULTIES,
+  ROUND_FORMATS,
+  ROUND_FORMAT_BLURBS,
+  ROUND_FORMAT_LABELS,
+} from '@/engine/types'
+import type { Difficulty, RoundFormat } from '@/engine/types'
 import { randomSeed } from '@/logic'
 import { Button, Card, Star } from '@/ui/primitives'
-import { getHighScore, useProgress } from '@/store/progress'
-import { DEFAULT_ROUND_SECONDS } from '@/engine/types'
+import { formatDuration, getBestTime, getHighScore, useProgress } from '@/store/progress'
 
 const isDifficulty = (value: string | null): value is Difficulty =>
   value !== null && (DIFFICULTIES as readonly string[]).includes(value)
+
+const isFormat = (value: string | null): value is RoundFormat =>
+  value !== null && (ROUND_FORMATS as readonly string[]).includes(value)
 
 /** Green / blue / red, in the order a board ramps up. */
 const DIFFICULTY_COLOURS: Record<Difficulty, string> = {
@@ -24,11 +33,13 @@ export function Play() {
   const game = getMinigame(gameId)
   const progress = useProgress()
 
-  // Seed and difficulty live in the URL, so a round is shareable and a
+  // Seed, mode and difficulty live in the URL, so a round is shareable and a
   // disputed question can be reproduced exactly.
   const seedParam = params.get('seed')
   const difficultyParam = params.get('difficulty')
+  const modeParam = params.get('mode')
   const difficulty: Difficulty = isDifficulty(difficultyParam) ? difficultyParam : 'medium'
+  const format: RoundFormat = isFormat(modeParam) ? modeParam : 'time-attack'
 
   const setParam = (key: string, value: string) => {
     const next = new URLSearchParams(params)
@@ -53,7 +64,11 @@ export function Play() {
   }
 
   if (!seedParam) {
-    const best = getHighScore(game.id, difficulty, progress)
+    const formats = game.formats ?? ROUND_FORMATS
+    const isSprint = format === 'sprint'
+    const bestScore = getHighScore(game.id, difficulty, progress)
+    const bestTime = getBestTime(game.id, difficulty, progress)
+    const questions = game.sprintQuestions ?? DEFAULT_SPRINT_QUESTIONS
     const seconds = game.roundSeconds ?? DEFAULT_ROUND_SECONDS
 
     return (
@@ -66,17 +81,40 @@ export function Play() {
           <p className="mt-1 font-semibold text-ink">{game.tagline}</p>
         </header>
 
+        <Card>
+          <h2 className="text-sm font-bold uppercase tracking-widest text-ink-soft">Mode</h2>
+          <div className="mt-3 flex flex-col gap-2">
+            {formats.map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => setParam('mode', mode)}
+                aria-pressed={mode === format}
+                className={`chunky px-4 py-3 text-left
+                  focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-coin
+                  ${mode === format ? 'bg-space-blue text-white' : 'bg-card text-ink hover:bg-card-shade'}`}
+              >
+                <span className="block text-base font-bold">{ROUND_FORMAT_LABELS[mode]}</span>
+                <span className="block text-sm font-medium opacity-90">
+                  {ROUND_FORMAT_BLURBS[mode]}
+                </span>
+              </button>
+            ))}
+          </div>
+        </Card>
+
         <Card className="bg-card text-center">
           <p className="text-sm font-bold uppercase tracking-widest text-ink-soft">
             Your best on {difficulty}
           </p>
-          <p className="shout mt-1 flex items-center justify-center gap-2 text-4xl text-coin">
+          <p className="shout mt-1 flex items-center justify-center gap-2 text-4xl text-coin tabular-nums">
             <Star earned className="h-7 w-7" />
-            {best}
+            {isSprint ? (bestTime === null ? '—' : formatDuration(bestTime)) : bestScore}
           </p>
           <p className="mt-2 text-sm font-semibold text-ink-soft">
-            {seconds} seconds · +100 per correct answer, −50 for a wrong one, combo bonus for a
-            streak. Beat your own record.
+            {isSprint
+              ? `${questions} questions against a stopwatch. Every wrong answer adds 10 seconds. Beat your own time.`
+              : `${seconds} seconds · +100 per correct answer, −50 for a wrong one, combo bonus for a streak. Beat your own record.`}
           </p>
         </Card>
 
@@ -119,14 +157,15 @@ export function Play() {
         <Link to="/" className="text-sm font-bold text-ink hover:underline">
           ← Games
         </Link>
-        <span className="text-sm font-bold text-ink capitalize">
-          {game.title} · {difficulty}
+        <span className="text-sm font-bold capitalize text-ink">
+          {ROUND_FORMAT_LABELS[format]} · {difficulty}
         </span>
       </div>
 
       <RoundScreen
         game={game}
         difficulty={difficulty}
+        format={format}
         seed={seedParam}
         onNewSeed={(seed) => setParam('seed', seed)}
       />

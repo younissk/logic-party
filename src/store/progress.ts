@@ -37,11 +37,13 @@ export interface Attempt {
 export interface ProgressState {
   version: 1
   attempts: Attempt[]
-  /** Best time-attack score, keyed by `gameId:difficulty`. */
+  /** Best time-attack score, keyed by `gameId:difficulty`. Higher is better. */
   highScores: Record<string, number>
+  /** Best sprint time in ms, keyed by `gameId:difficulty`. Lower is better. */
+  bestTimes: Record<string, number>
 }
 
-const EMPTY: ProgressState = { version: 1, attempts: [], highScores: {} }
+const EMPTY: ProgressState = { version: 1, attempts: [], highScores: {}, bestTimes: {} }
 
 function readStorage(): ProgressState {
   try {
@@ -55,11 +57,13 @@ function readStorage(): ProgressState {
       Array.isArray((parsed as ProgressState).attempts)
     ) {
       const state = parsed as Partial<ProgressState>
-      // highScores was added after the first release; saved data may predate it.
+      // highScores and bestTimes were added after the first release; saved
+      // data may predate either.
       return {
         version: 1,
         attempts: state.attempts ?? [],
         highScores: state.highScores ?? {},
+        bestTimes: state.bestTimes ?? {},
       }
     }
     return EMPTY
@@ -119,6 +123,32 @@ export function submitScore(gameId: string, difficulty: Difficulty, score: numbe
   if (score <= previous) return false
   commit({ ...state, highScores: { ...state.highScores, [key]: score } })
   return true
+}
+
+/** Best sprint time in milliseconds, or null if this one has never been run. */
+export function getBestTime(
+  gameId: string,
+  difficulty: Difficulty,
+  progress: ProgressState = state,
+): number | null {
+  return progress.bestTimes[highScoreKey(gameId, difficulty)] ?? null
+}
+
+/** Saves the time if it beats the stored best. Lower wins. */
+export function submitTime(gameId: string, difficulty: Difficulty, ms: number): boolean {
+  const key = highScoreKey(gameId, difficulty)
+  const previous = state.bestTimes[key]
+  if (previous !== undefined && ms >= previous) return false
+  commit({ ...state, bestTimes: { ...state.bestTimes, [key]: ms } })
+  return true
+}
+
+/** Milliseconds as `M:SS.d` — the shape a stopwatch should read in. */
+export function formatDuration(ms: number): string {
+  const totalSeconds = ms / 1000
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds - minutes * 60
+  return `${minutes}:${seconds.toFixed(1).padStart(4, '0')}`
 }
 
 export function clearProgress(): void {

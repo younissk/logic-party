@@ -1,8 +1,6 @@
 /** Shared UI atoms, in the party-board style. See index.css for the vocabulary. */
 
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
-import type { Formula } from '@/logic'
-import { format } from '@/logic'
 
 type ButtonVariant = 'primary' | 'coin' | 'secondary' | 'ghost' | 'danger'
 
@@ -38,11 +36,6 @@ export function Card({ children, className = '' }: { children: ReactNode; classN
   return (
     <div className={`tile p-4 ${hasOwnBackground ? '' : 'bg-card'} ${className}`}>{children}</div>
   )
-}
-
-/** A formula, in the face chosen for logic-symbol coverage. */
-export function FormulaText({ formula, className = '' }: { formula: Formula; className?: string }) {
-  return <span className={`formula ${className}`}>{format(formula)}</span>
 }
 
 /**
