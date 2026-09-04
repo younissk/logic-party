@@ -8,6 +8,7 @@ import {
   ROUND_FORMATS,
   ROUND_FORMAT_BLURBS,
   ROUND_FORMAT_LABELS,
+  SCORING,
 } from '@/engine/types'
 import type { Difficulty, RoundFormat } from '@/engine/types'
 import { randomSeed } from '@/logic'
@@ -113,7 +114,7 @@ export function Play() {
           </p>
           <p className="mt-2 text-sm font-semibold text-ink-soft">
             {isSprint
-              ? `${questions} questions against a stopwatch. Every wrong answer adds 10 seconds. Beat your own time.`
+              ? `${questions} questions against a stopwatch. You cannot move on until the answer is right, and every wrong attempt adds ${SCORING.sprintPenaltySeconds} seconds. Beat your own time.`
               : `${seconds} seconds · +100 per correct answer, −50 for a wrong one, combo bonus for a streak. Beat your own record.`}
           </p>
         </Card>

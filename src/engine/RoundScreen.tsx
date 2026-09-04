@@ -1,13 +1,14 @@
 /**
- * The chrome around every minigame: clock or stopwatch, score, combo,
- * feedback and the end-of-round scoreboard. Written once so a new minigame is
- * only its own question screen.
+ * The chrome around every minigame: countdown, clock or stopwatch, score,
+ * combo, feedback and the end-of-round scoreboard. Written once so a new
+ * minigame is only its own question screen.
  */
 
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Banner, Button, Card, Star } from '@/ui/primitives'
 import { Confetti } from '@/ui/Confetti'
+import { Countdown } from '@/ui/Countdown'
 import { randomSeed } from '@/logic'
 import { formatDuration, getBestTime, getHighScore, useProgress } from '@/store/progress'
 import { useRound } from './useRound'
@@ -21,7 +22,42 @@ export interface RoundScreenProps {
   onNewSeed: (seed: string) => void
 }
 
-export function RoundScreen({ game, difficulty, format, seed, onNewSeed }: RoundScreenProps) {
+/**
+ * Counts in, then hands over to the round.
+ *
+ * The round is mounted only after GO, so its clock starts at GO — nothing has
+ * to be paused, and the two can never disagree about when the round began.
+ */
+export function RoundScreen(props: RoundScreenProps) {
+  const [runId, setRunId] = useState(0)
+  const [counting, setCounting] = useState(true)
+
+  // A new seed, or a replay of the same one, counts in again.
+  useEffect(() => {
+    setCounting(true)
+  }, [props.seed, runId])
+
+  const done = useCallback(() => setCounting(false), [])
+
+  if (counting) return <Countdown onDone={done} />
+
+  return (
+    <ActiveRound
+      {...props}
+      key={`${props.seed}:${runId}`}
+      onReplay={() => setRunId((previous) => previous + 1)}
+    />
+  )
+}
+
+function ActiveRound({
+  game,
+  difficulty,
+  format,
+  seed,
+  onNewSeed,
+  onReplay,
+}: RoundScreenProps & { onReplay: () => void }) {
   const round = useRound({ game, difficulty, format, seed })
   const progress = useProgress()
 
@@ -43,6 +79,8 @@ export function RoundScreen({ game, difficulty, format, seed, onNewSeed }: Round
     setBurst((previous) => previous + 1)
   }, [isNewBest])
 
+  const isSprint = format === 'sprint'
+
   if (round.error) {
     return (
       <Card className="bg-space-red text-white">
@@ -56,7 +94,6 @@ export function RoundScreen({ game, difficulty, format, seed, onNewSeed }: Round
   }
 
   if (round.finished) {
-    const isSprint = format === 'sprint'
     const best = isSprint
       ? getBestTime(game.id, difficulty, progress)
       : getHighScore(game.id, difficulty, progress)
@@ -84,26 +121,32 @@ export function RoundScreen({ game, difficulty, format, seed, onNewSeed }: Round
               {isSprint
                 ? best === null
                   ? 'No previous time'
-                  : `Best on ${difficulty}: ${formatDuration(best as number)}`
+                  : `Best on ${difficulty}: ${formatDuration(best)}`
                 : `Best on ${difficulty}: ${best}`}
             </p>
           )}
 
           <dl className="mt-5 grid grid-cols-3 gap-2 text-sm">
-            <Tally label="Correct" value={`${round.correctCount}/${round.answered}`} />
             {isSprint ? (
-              <Tally label="Penalty" value={`+${round.penaltySeconds}s`} />
+              <>
+                <Tally label="Solved" value={`${round.correctCount}`} />
+                <Tally label="Mistakes" value={`${round.mistakes}`} />
+                <Tally label="Penalty" value={`+${round.penaltySeconds}s`} />
+              </>
             ) : (
-              <Tally label="Best combo" value={`×${round.bestCombo}`} />
+              <>
+                <Tally label="Correct" value={`${round.correctCount}/${round.answered}`} />
+                <Tally label="Best combo" value={`×${round.bestCombo}`} />
+                <Tally
+                  label="Accuracy"
+                  value={
+                    round.answered === 0
+                      ? '—'
+                      : `${Math.round((round.correctCount / round.answered) * 100)}%`
+                  }
+                />
+              </>
             )}
-            <Tally
-              label="Accuracy"
-              value={
-                round.answered === 0
-                  ? '—'
-                  : `${Math.round((round.correctCount / round.answered) * 100)}%`
-              }
-            />
           </dl>
 
           <p className="mt-4 text-xs font-semibold text-ink-soft">
@@ -114,7 +157,7 @@ export function RoundScreen({ game, difficulty, format, seed, onNewSeed }: Round
             <Button variant="coin" onClick={() => onNewSeed(randomSeed())}>
               Play again
             </Button>
-            <Button variant="secondary" onClick={() => round.restart()}>
+            <Button variant="secondary" onClick={onReplay}>
               Retry this seed
             </Button>
             <Link to="/">
@@ -137,21 +180,21 @@ export function RoundScreen({ game, difficulty, format, seed, onNewSeed }: Round
 
       <header className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-3">
-          {format === 'sprint' ? (
+          {isSprint ? (
             <span className="text-sm font-bold uppercase tracking-wider text-ink">
-              {Math.min(round.answered + (round.locked ? 0 : 1), round.total ?? 0)} of {round.total}
+              {Math.min(round.correctCount + 1, round.total ?? 0)} of {round.total}
             </span>
           ) : (
             <span className="shout text-3xl text-coin tabular-nums">{round.points}</span>
           )}
 
           <div className="flex items-center gap-2">
-            {format === 'time-attack' && round.combo >= 2 && (
+            {!isSprint && round.combo >= 2 && (
               <span className="chunky pop-in bg-grass px-3 py-1 text-sm font-bold text-white">
                 ×{round.combo} combo
               </span>
             )}
-            {format === 'sprint' && round.penaltySeconds > 0 && (
+            {isSprint && round.penaltySeconds > 0 && (
               <span className="chunky bg-space-red px-3 py-1 text-sm font-bold text-white">
                 +{round.penaltySeconds}s
               </span>
@@ -164,18 +207,16 @@ export function RoundScreen({ game, difficulty, format, seed, onNewSeed }: Round
               role="timer"
               aria-live="off"
             >
-              {format === 'sprint'
-                ? formatDuration(round.elapsedMs ?? 0)
-                : (round.secondsLeft ?? 0)}
+              {isSprint ? formatDuration(round.elapsedMs ?? 0) : (round.secondsLeft ?? 0)}
             </span>
           </div>
         </div>
 
         <div className="h-4 overflow-hidden rounded-full border-3 border-ink bg-card">
-          {format === 'sprint' ? (
+          {isSprint ? (
             <div
               className="h-full bg-space-blue transition-[width] duration-200"
-              style={{ width: `${((round.answered / (round.total ?? 1)) * 100).toFixed(1)}%` }}
+              style={{ width: `${((round.correctCount / (round.total ?? 1)) * 100).toFixed(1)}%` }}
             />
           ) : (
             <div
@@ -211,7 +252,7 @@ export function RoundScreen({ game, difficulty, format, seed, onNewSeed }: Round
               </p>
               {round.lastAward && (
                 <span className="shout shrink-0 text-2xl tabular-nums">
-                  {format === 'sprint'
+                  {isSprint
                     ? round.lastAward.penaltySeconds > 0
                       ? `+${round.lastAward.penaltySeconds}s`
                       : '✓'
@@ -220,30 +261,55 @@ export function RoundScreen({ game, difficulty, format, seed, onNewSeed }: Round
               )}
             </div>
 
-            {format === 'time-attack' && round.lastAward && round.lastAward.comboBonus > 0 && (
+            {!isSprint && round.lastAward && round.lastAward.comboBonus > 0 && (
               <p className="text-sm font-bold">
                 includes +{round.lastAward.comboBonus} combo bonus (×{round.lastAward.combo})
               </p>
             )}
 
-            {round.verdict.detail && <p className="mt-2 text-sm font-medium">{round.verdict.detail}</p>}
-            {game.explain && round.question !== null && (
-              <p className="mt-1 text-sm font-medium opacity-90">{game.explain(round.question)}</p>
+            {/*
+              While the answer still has to be corrected, saying anything about
+              *which* part was wrong would hand over the answer — on a boolean
+              cell, "this one is wrong" is the answer.
+            */}
+            {round.awaitingRetry ? (
+              <p className="mt-2 text-sm font-medium">
+                Fix it to carry on. The stopwatch is still running.
+              </p>
+            ) : (
+              <>
+                {round.verdict.detail && (
+                  <p className="mt-2 text-sm font-medium">{round.verdict.detail}</p>
+                )}
+                {game.explain && round.question !== null && (
+                  <p className="mt-1 text-sm font-medium opacity-90">{game.explain(round.question)}</p>
+                )}
+              </>
             )}
           </div>
 
-          <Button variant="coin" className="mt-4 w-full" onClick={round.next} autoFocus>
-            {round.finalMs !== null
-              ? 'See your time'
-              : format === 'time-attack'
-                ? 'Next — clock is running'
-                : 'Next — stopwatch is running'}
+          <Button
+            variant="coin"
+            className="mt-4 w-full"
+            onClick={round.awaitingRetry ? round.retry : round.next}
+            autoFocus
+          >
+            {round.awaitingRetry
+              ? 'Try again'
+              : round.finalMs !== null
+                ? 'See your time'
+                : isSprint
+                  ? 'Next — stopwatch is running'
+                  : 'Next — clock is running'}
           </Button>
         </Banner>
       ) : (
-        <Button variant="ghost" className="self-center" onClick={round.reveal}>
-          {format === 'sprint' ? 'Skip — adds 10s' : 'Skip — costs points'}
-        </Button>
+        // Sprint has no skip: you cannot move on until the answer is right.
+        !isSprint && (
+          <Button variant="ghost" className="self-center" onClick={round.reveal}>
+            Skip — costs points
+          </Button>
+        )
       )}
     </div>
   )

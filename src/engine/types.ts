@@ -95,7 +95,7 @@ export const ROUND_FORMAT_LABELS: Readonly<Record<RoundFormat, string>> = {
 
 export const ROUND_FORMAT_BLURBS: Readonly<Record<RoundFormat, string>> = {
   'time-attack': 'As many as you can before the clock runs out.',
-  sprint: 'Finish the set as fast as you can.',
+  sprint: 'Every answer must be right. Finish the set as fast as you can.',
 }
 
 /** Seconds in a time-attack round when a minigame does not say otherwise. */
@@ -119,10 +119,21 @@ export const SCORING = {
   /** time-attack: ceiling on the combo bonus, so a streak cannot run away. */
   maxComboBonus: 100,
   /**
-   * sprint: seconds added to the final time per wrong answer. Without this,
-   * the fastest strategy is to answer at random and let the count tick up.
+   * sprint: seconds added per wrong submission.
+   *
+   * Sprint already punishes a mistake by making you correct it, which costs
+   * real stopwatch time. This penalty exists on top of that for one reason:
+   * without it, guessing beats thinking on the small tables. An easy question
+   * is four booleans, the feedback says how many rows are wrong, and that is
+   * a game of Mastermind solvable in three or four guesses of two seconds
+   * each — faster than working the table out honestly. At five seconds a
+   * guess, guessing is clearly the slower strategy.
+   *
+   * Which is also why a wrong sprint answer never reveals the solution or
+   * which rows were wrong: on a boolean cell, "this one is wrong" *is* the
+   * answer.
    */
-  sprintPenaltySeconds: 10,
+  sprintPenaltySeconds: 5,
 } as const
 
 export interface Minigame<Question = unknown, Answer = unknown> {

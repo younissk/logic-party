@@ -55,6 +55,13 @@ export interface RoundState {
   elapsedMs: number | null
   /** sprint: seconds added so far by wrong answers. */
   penaltySeconds: number
+  /** sprint: wrong submissions this round. */
+  mistakes: number
+  /**
+   * sprint: the answer was wrong and must be corrected before the round moves
+   * on. The solution stays hidden while this is true.
+   */
+  awaitingRetry: boolean
   points: number
   lastAward: Award | null
   combo: number
@@ -68,7 +75,9 @@ export interface RoundState {
   finalMs: number | null
   error: string | null
   submit: (answer: unknown) => void
-  /** Give up on this question: locks it and reveals the solution. */
+  /** sprint: unlock the question so the answer can be corrected. */
+  retry: () => void
+  /** time-attack only: give up on this question, revealing the solution. */
   reveal: () => void
   next: () => void
   restart: (seed?: string) => void
@@ -101,6 +110,8 @@ export function useRound(options: RoundOptions): RoundState {
     format === 'time-attack' ? roundSeconds : null,
   )
   const [penaltySeconds, setPenaltySeconds] = useState(0)
+  const [mistakes, setMistakes] = useState(0)
+  const [awaitingRetry, setAwaitingRetry] = useState(false)
   const [rawElapsedMs, setRawElapsedMs] = useState(0)
   /** Set the instant the last sprint question is answered; also stops the watch. */
   const [finalMs, setFinalMs] = useState<number | null>(null)
@@ -122,6 +133,8 @@ export function useRound(options: RoundOptions): RoundState {
       setIsNewBest(false)
       setSecondsLeft(format === 'time-attack' ? roundSeconds : null)
       setPenaltySeconds(0)
+      setMistakes(0)
+      setAwaitingRetry(false)
       setRawElapsedMs(0)
       setFinalMs(null)
       roundStartedAt.current = Date.now()
@@ -210,6 +223,13 @@ export function useRound(options: RoundOptions): RoundState {
     [difficulty, format, game.id, practiceOnly],
   )
 
+  /**
+   * Sprint demands a correct answer before it will move on, so a mistake
+   * costs the real time spent fixing it. That alone is not quite enough of a
+   * deterrent — see the note on SCORING.sprintPenaltySeconds.
+   */
+  const requireCorrect = format === 'sprint'
+
   const finish = useCallback(
     (result: Verdict) => {
       const questionScore = scoreOf(result)
@@ -218,26 +238,30 @@ export function useRound(options: RoundOptions): RoundState {
         ? Math.min(SCORING.maxComboBonus, Math.max(0, nextCombo - 1) * SCORING.comboStep)
         : 0
       const delta = result.correct ? SCORING.correct + comboBonus : -SCORING.wrong
-      const penalty = format === 'sprint' && !result.correct ? SCORING.sprintPenaltySeconds : 0
+      const penalty = requireCorrect && !result.correct ? SCORING.sprintPenaltySeconds : 0
 
       setVerdict(result)
       setLastAward({ points: delta, comboBonus, combo: nextCombo, penaltySeconds: penalty })
       setCombo(nextCombo)
       setBestCombo((previous) => Math.max(previous, nextCombo))
-      if (result.correct) setCorrectCount((previous) => previous + 1)
+      setAnswered((previous) => previous + 1)
       // Clamped at zero: a run of bad luck should not bury the score so deep
       // that the rest of the round stops mattering.
       setPoints((previous) => Math.max(0, previous + delta))
 
       const totalPenalty = penaltySeconds + penalty
-      if (penalty > 0) setPenaltySeconds(totalPenalty)
+      if (penalty > 0) {
+        setPenaltySeconds(totalPenalty)
+        setMistakes((previous) => previous + 1)
+      }
+      if (requireCorrect && !result.correct) setAwaitingRetry(true)
 
-      const answeredNow = answered + 1
-      setAnswered(answeredNow)
+      const solvedNow = result.correct ? correctCount + 1 : correctCount
+      if (result.correct) setCorrectCount(solvedNow)
 
-      // The stopwatch stops the moment the last answer lands, not when the
-      // player finishes reading the feedback.
-      if (format === 'sprint' && total !== null && answeredNow >= total) {
+      // The stopwatch stops the moment the last question is *solved*, not when
+      // the player finishes reading the feedback.
+      if (format === 'sprint' && total !== null && solvedNow >= total) {
         setFinalMs(Date.now() - roundStartedAt.current + totalPenalty * 1000)
       }
 
@@ -256,8 +280,8 @@ export function useRound(options: RoundOptions): RoundState {
       }
     },
     [
-      answered,
       combo,
+      correctCount,
       difficulty,
       format,
       game.id,
@@ -265,6 +289,7 @@ export function useRound(options: RoundOptions): RoundState {
       index,
       penaltySeconds,
       practiceOnly,
+      requireCorrect,
       seed,
       total,
     ],
@@ -308,18 +333,23 @@ export function useRound(options: RoundOptions): RoundState {
     [current, finish, finished, game, locked],
   )
 
+  const retry = useCallback(() => {
+    if (!awaitingRetry) return
+    setAwaitingRetry(false)
+    setVerdict(null)
+  }, [awaitingRetry])
+
   const reveal = useCallback(() => {
-    if (locked || finished || !current) return
+    // Sprint has no skip: the whole point is that you cannot move on until the
+    // answer is right.
+    if (requireCorrect || locked || finished || !current) return
     finish({
       correct: false,
       message: 'Skipped',
-      detail:
-        format === 'sprint'
-          ? `A skip counts as wrong: +${SCORING.sprintPenaltySeconds}s.`
-          : 'A skip counts as a wrong answer.',
+      detail: 'A skip counts as a wrong answer.',
       score: 0,
     })
-  }, [current, finish, finished, format, locked])
+  }, [current, finish, finished, locked, requireCorrect])
 
   const next = useCallback(() => {
     if (total !== null && index + 1 >= total) {
@@ -345,13 +375,16 @@ export function useRound(options: RoundOptions): RoundState {
     index,
     total,
     question: current?.question ?? null,
-    solution: locked ? (current?.solution ?? null) : null,
+    // Never reveal the solution while the player still has to correct it.
+    solution: locked && !awaitingRetry ? (current?.solution ?? null) : null,
     verdict,
     locked,
     secondsLeft,
     timeFraction: format === 'time-attack' && secondsLeft !== null ? secondsLeft / roundSeconds : 1,
     elapsedMs,
     penaltySeconds,
+    mistakes,
+    awaitingRetry,
     points,
     lastAward,
     combo,
@@ -363,6 +396,7 @@ export function useRound(options: RoundOptions): RoundState {
     finalMs,
     error: dealt.error,
     submit,
+    retry,
     reveal,
     next,
     restart,

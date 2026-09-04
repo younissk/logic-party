@@ -43,14 +43,29 @@ decision rather than a free pause.
 | Wrong or skipped | **−50**, flat |
 | Score floor | 0 — a bad run cannot bury the score so deep the rest stops mattering |
 
-**Sprint** — a fixed set (10 by default) against a stopwatch. Finish them as
-fast as you can; each wrong answer adds **+10s** to the finishing time. Without
-that penalty the fastest strategy is to answer at random and let the counter
-tick up. The stopwatch stops the instant the last answer lands, not when you
-finish reading the feedback.
+**Sprint** — a fixed set (10 by default) against a stopwatch. There is no skip
+and no moving on: **a question is only passed once it is answered correctly**,
+so a mistake costs the real time spent fixing it. The stopwatch stops the
+instant the last question is solved, not when you finish reading the feedback.
 
-The flat time-attack penalty is deliberate: it has to be felt for rushing to
-carry real risk. Partial credit is still recorded against the topic, it just
+Two consequences worth knowing, because they are not obvious:
+
+- A wrong sprint answer **reveals nothing** — not the solution, not which rows
+  were wrong. On a boolean cell, "this one is wrong" *is* the answer. All you
+  are told is how many are wrong.
+- There is still a **+5s** penalty per wrong attempt on top of the lost time.
+  Having to correct a mistake sounds like penalty enough, but it is not: an
+  easy question is four booleans and the feedback gives a count, which makes it
+  a game of Mastermind solvable in three or four two-second guesses — faster
+  than working the table out honestly. At five seconds a guess, guessing is
+  clearly the slower strategy.
+
+Both rounds count in with a **3 · 2 · 1 · GO**. The round is mounted only after
+GO, so the clock starts at GO — nothing needs pausing, and the countdown and
+the stopwatch cannot disagree about when the round began.
+
+The flat time-attack penalty is deliberate too: it has to be felt for rushing
+to carry real risk. Partial credit is still recorded against the topic, it just
 does not soften the hit. Every number lives in `SCORING` in
 `src/engine/types.ts`.
 
