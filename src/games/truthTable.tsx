@@ -24,6 +24,7 @@ import { defineMinigame } from '@/engine/registry'
 import type { Difficulty, GenerateContext, MinigameScreenProps, Verdict } from '@/engine/types'
 import { Button, Card } from '@/ui/primitives'
 import { FormulaText, VariableName } from '@/ui/FormulaText'
+import { TruthTableGuide } from './truthTable.guide'
 
 export interface TruthTableQuestion {
   formula: Formula
@@ -222,6 +223,7 @@ export const truthTableGame = defineMinigame<TruthTableQuestion, TruthTableAnswe
   check,
   solve,
   Screen,
+  Guide: TruthTableGuide,
   // Two questions are the same question exactly when the formula is.
   questionKey: (question) => format(question.formula),
 })

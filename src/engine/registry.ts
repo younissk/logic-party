@@ -5,6 +5,8 @@
  */
 
 import type { AnyMinigame, Minigame, Topic } from './types'
+import type { Category } from './categories'
+import { categoriesOf } from './categories'
 import { truthTableGame } from '@/games/truthTable'
 
 /** Identity function that keeps a minigame's Question/Answer types inferred. */
@@ -22,6 +24,10 @@ export function getMinigame(id: string): AnyMinigame | undefined {
 
 export function minigamesForTopic(topic: Topic): AnyMinigame[] {
   return MINIGAMES.filter((game) => game.topics.includes(topic))
+}
+
+export function minigamesInCategory(category: Category): AnyMinigame[] {
+  return MINIGAMES.filter((game) => categoriesOf(game.topics).includes(category))
 }
 
 /** Topics that at least one implemented minigame covers. */

@@ -174,6 +174,17 @@ export interface Minigame<Question = unknown, Answer = unknown> {
   questionKey?(question: Question): string
 
   readonly Screen: ComponentType<MinigameScreenProps<Question, Answer>>
+
+  /**
+   * How to do this kind of exercise: worked examples, the rules, the usual
+   * mistakes. Rendered at /guide/<id>.
+   *
+   * Written in React rather than MDX so a guide can compute its examples with
+   * the same solver the game marks with — a worked truth table in the guide is
+   * produced by `evaluate`, not typed out, so it cannot drift from the game or
+   * be quietly wrong.
+   */
+  readonly Guide?: ComponentType
 }
 
 /**

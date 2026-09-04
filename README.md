@@ -110,16 +110,69 @@ text). `.tile` deliberately sets *no* background — it is defined after
 Tailwind's utilities, so a `background` shorthand there would silently
 override every `bg-*` class put on a card.
 
+## Categories and topics
+
+The app is organised by the four chapters of the course:
+
+| | |
+|---|---|
+| **Propositional Logic** | connectives, truth tables, normal forms, satisfiability, resolution |
+| **Equational Reasoning** | rewriting one formula into another, one justified equivalence at a time |
+| **First-Order Logic** | quantifiers, structures, models, unification |
+| **Theories in First-Order Logic** | reasoning inside a fixed theory: equality, orders, arithmetic |
+
+Two different things, deliberately:
+
+- a **category** is a chapter — coarse, stable, what you revise *for*;
+- a **topic** is a single skill — fine, what progress tracking ranks you on.
+
+A minigame declares only its topics; its category *follows* from them via
+`TOPIC_CATEGORY`, so the two cannot disagree and a new topic without a home is
+a type error rather than something that quietly vanishes from the navigation.
+
+An empty category shows the exercises planned for it. Those lists are
+**placeholders** — edit `planned` in
+[`src/engine/categories.ts`](src/engine/categories.ts) to match the real
+syllabus.
+
+## Guides
+
+Each minigame can carry a `Guide`: a page at `/guide/<id>` explaining how to do
+that kind of exercise, with worked examples.
+
+Guides are **React, not MDX**. MDX would need a plugin and build config, and
+the valuable half of a logic guide is interactive anyway. More importantly, a
+React guide computes its examples with the same solver the game marks answers
+with — every truth table in the truth-table guide is produced by `evaluate`,
+not typed out — so a guide physically cannot drift from the game it explains,
+or be quietly wrong about an answer.
+
+[`src/ui/guide.tsx`](src/ui/guide.tsx) has the shared pieces:
+
+- `<F>p → q</F>` — a formula in prose, parsed and colour-coded
+  (`<Sym>→</Sym>` for a bare connective, which is not a formula)
+- `<MiniTruthTable source="p → q" columns={['p ∧ q']} />` — a live table, with
+  optional intermediate columns
+- `<AssignmentPlayground source="¬(p ∧ q) → r" />` — toggle the variables and
+  watch every subformula update, smallest first
+- `<GuideSection>`, `<Prose>`, `<Callout>`
+
+`src/engine/guides.test.tsx` renders every registered guide under jsdom. That
+is not ceremony: guides parse formula strings *while rendering*, so a typo in
+one is a crashed page rather than a type error. It caught exactly that on its
+first run.
+
 ## Layout
 
 ```
 src/logic/     the engine — AST, parser, printer, evaluator, truth tables,
                NNF/CNF/DNF, clauses, semantics, seeded RNG, generators.
                Pure TypeScript, no React, ~58 tests. Everything builds on it.
-src/engine/    the minigame contract, registry, round runner, round chrome.
-src/games/     one file per minigame.
+src/engine/    the minigame contract, registry, categories, round runner,
+               round chrome.
+src/games/     one file per minigame, plus its guide.
 src/store/     progress in localStorage: per-topic accuracy, weak topics.
-src/pages/     home and play screens.
+src/pages/     home, category, play and guide screens.
 ```
 
 `src/logic` never imports from anywhere else. That is what keeps the solvers
@@ -158,6 +211,9 @@ Three things to get right:
 Set `formats` if a minigame only makes sense one way; it offers both otherwise.
 Use `<FormulaText>` rather than `format()` wherever a formula is displayed, so
 it picks up the shared colouring.
+
+Write a `Guide` too — `guides.test.tsx` asserts every minigame has one. A
+minigame without a guide is one you can only be tested by, never revise from.
 
 ## Reproducibility
 

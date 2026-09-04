@@ -145,8 +145,17 @@ export function Play() {
         <Button variant="coin" className="text-xl" onClick={() => setParam('seed', randomSeed())}>
           ★ Start round
         </Button>
+
+        {game.Guide && (
+          <Link to={`/guide/${game.id}`}>
+            <Button variant="secondary" className="w-full">
+              How to do these
+            </Button>
+          </Link>
+        )}
+
         <Link to="/" className="self-center">
-          <Button variant="ghost">Back to games</Button>
+          <Button variant="ghost">Back to the course</Button>
         </Link>
       </div>
     )
