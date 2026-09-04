@@ -1,8 +1,47 @@
 @import 'tailwindcss';
 
+/*
+ * Party-board look.
+ *
+ * The palette follows the Mario Party board vocabulary: blue and red spaces,
+ * gold stars and coins, on a bright sky. Colours are our own values chosen to
+ * sit in that family — no Nintendo assets, fonts or marks are used.
+ *
+ * The three rules that make it read as a party game rather than a form:
+ *   1. thick dark outlines on everything;
+ *   2. hard offset shadows, no blur, so shapes look like physical tokens;
+ *   3. buttons that physically press down into their own shadow.
+ */
+
+@theme {
+  --color-space-blue: #009bd9;
+  --color-space-blue-deep: #0074a8;
+  --color-space-red: #e62310;
+  --color-space-red-deep: #b01909;
+  --color-coin: #fccf00;
+  --color-coin-deep: #d8a800;
+  --color-grass: #44af35;
+  --color-grass-deep: #2f8524;
+  --color-plum: #7b4bc9;
+
+  /* Near-black navy: the outline colour on every token and card. */
+  --color-ink: #1b2340;
+  --color-ink-soft: #55608a;
+
+  --color-card: #fffdf5;
+  --color-card-shade: #f4ecd8;
+
+  --font-display: 'Fredoka', ui-rounded, 'SF Pro Rounded', system-ui, sans-serif;
+}
+
 :root {
-  color-scheme: dark;
-  --font-formula: 'Iowan Old Style', 'Palatino Linotype', Palatino, Georgia, serif;
+  color-scheme: light;
+  /*
+   * Logic symbols (∧ ∨ ¬ → ↔ ⊤ ⊥ □) are not in every display face, and a
+   * per-glyph fallback looks broken. Formulas get a stack chosen for symbol
+   * coverage first, rounded shape second.
+   */
+  --font-formula: ui-rounded, 'SF Pro Rounded', 'Segoe UI', system-ui, sans-serif;
 }
 
 html,
@@ -13,19 +52,104 @@ body,
 
 body {
   margin: 0;
-  background: #020617;
-  color: #e2e8f0;
-  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  color: var(--color-ink);
+  font-family: var(--font-display);
+  font-weight: 500;
   -webkit-font-smoothing: antialiased;
-  /* Stop iOS from zooming when a formula input is focused. */
   -webkit-text-size-adjust: 100%;
+
+  /* Sky, with confetti scattered across it. */
+  background-color: #5ec8f5;
+  background-image:
+    radial-gradient(circle at 12% 18%, rgba(255, 255, 255, 0.55) 0 6px, transparent 6px),
+    radial-gradient(circle at 82% 12%, rgba(252, 207, 0, 0.5) 0 7px, transparent 7px),
+    radial-gradient(circle at 68% 42%, rgba(255, 255, 255, 0.4) 0 5px, transparent 5px),
+    radial-gradient(circle at 22% 62%, rgba(230, 35, 16, 0.28) 0 6px, transparent 6px),
+    radial-gradient(circle at 90% 74%, rgba(255, 255, 255, 0.45) 0 5px, transparent 5px),
+    radial-gradient(circle at 40% 88%, rgba(68, 175, 53, 0.3) 0 7px, transparent 7px),
+    linear-gradient(180deg, #7fd6f7 0%, #5ec8f5 45%, #34b3ea 100%);
+  background-attachment: fixed;
 }
 
-/* Formulas are the content of this app; give them their own face. */
 .formula {
   font-family: var(--font-formula);
   font-feature-settings: 'liga' 0;
   letter-spacing: 0.01em;
+}
+
+/*
+ * A card is a board tile: thick outline, hard shadow, no blur.
+ *
+ * Deliberately sets no background. This class is defined after Tailwind's
+ * utilities, so a `background` shorthand here would beat every `bg-*` class
+ * and silently repaint coloured banners cream. Callers bring their own
+ * background utility.
+ */
+.tile {
+  border: 3px solid var(--color-ink);
+  border-radius: 1.25rem;
+  box-shadow: 0 6px 0 var(--color-ink);
+}
+
+/* Buttons press into their own shadow. */
+.chunky {
+  border: 3px solid var(--color-ink);
+  border-radius: 999px;
+  box-shadow: 0 5px 0 var(--color-ink);
+  transition:
+    transform 90ms ease-out,
+    box-shadow 90ms ease-out,
+    filter 120ms ease-out;
+}
+
+.chunky:active:not(:disabled) {
+  transform: translateY(5px);
+  box-shadow: 0 0 0 var(--color-ink);
+}
+
+.chunky:disabled {
+  filter: saturate(0.25);
+  box-shadow: 0 5px 0 var(--color-ink-soft);
+  border-color: var(--color-ink-soft);
+}
+
+/* Board space: the round token used for truth values. */
+.space {
+  border: 3px solid var(--color-ink);
+  border-radius: 999px;
+  box-shadow: 0 4px 0 var(--color-ink);
+  transition:
+    transform 90ms ease-out,
+    box-shadow 90ms ease-out;
+}
+
+.space:active:not(:disabled) {
+  transform: translateY(4px);
+  box-shadow: 0 0 0 var(--color-ink);
+}
+
+/* Heavy outlined display text, for the few places that need to shout. */
+.shout {
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  text-shadow:
+    2px 2px 0 var(--color-ink),
+    -1px -1px 0 var(--color-ink),
+    1px -1px 0 var(--color-ink),
+    -1px 1px 0 var(--color-ink);
+}
+
+@keyframes pop-in {
+  from {
+    transform: scale(0.82);
+  }
+  to {
+    transform: scale(1);
+  }
+}
+
+.pop-in {
+  animation: pop-in 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 @media (prefers-reduced-motion: reduce) {

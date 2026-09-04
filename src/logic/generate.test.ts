@@ -17,8 +17,8 @@ import { format } from './print'
  * Checked on the AST, not the printed string: `(r ∨ q) → q` contains the text
  * "q → q" but is a perfectly good formula, whereas `r ∨ q ∨ q` is not.
  */
-const chainOperands = (formula: Formula, kind: Formula['kind']): Formula[] =>
-  formula.kind === kind && (kind === 'and' || kind === 'or')
+const chainOperands = (formula: Formula, kind: 'and' | 'or'): Formula[] =>
+  formula.kind === kind
     ? [...chainOperands(formula.left, kind), ...chainOperands(formula.right, kind)]
     : [formula]
 

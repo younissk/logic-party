@@ -28,6 +28,20 @@ Three rules the codebase follows:
    The generator refuses formulas with fictitious variables or operands
    combined with themselves.
 
+## Look
+
+Party-board styling: blue and red spaces, gold stars and coins on a bright
+sky, thick dark outlines, hard un-blurred shadows, and buttons that press down
+into their own shadow. The palette sits in the family of the genre
+(blue `#009BD9`, yellow `#FCCF00`, red `#E62310`, green `#44AF35`) but the
+values, shapes and typeface are our own — no Nintendo assets or marks.
+
+The vocabulary lives in `src/index.css` as four classes: `.tile` (card),
+`.chunky` (button), `.space` (round board token), `.shout` (outlined display
+text). `.tile` deliberately sets *no* background — it is defined after
+Tailwind's utilities, so a `background` shorthand there would silently
+override every `bg-*` class put on a card.
+
 ## Layout
 
 ```

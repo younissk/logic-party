@@ -9,6 +9,13 @@ import { Button, Card } from '@/ui/primitives'
 const isDifficulty = (value: string | null): value is Difficulty =>
   value !== null && (DIFFICULTIES as readonly string[]).includes(value)
 
+/** Green / blue / red, in the order a board ramps up. */
+const DIFFICULTY_COLOURS: Record<Difficulty, string> = {
+  easy: 'bg-grass text-white',
+  medium: 'bg-space-blue text-white',
+  hard: 'bg-space-red text-white',
+}
+
 export function Play() {
   const { gameId = '' } = useParams()
   const [params, setParams] = useSearchParams()
@@ -29,12 +36,12 @@ export function Play() {
   if (!game) {
     return (
       <Card>
-        <h1 className="font-semibold">No such minigame</h1>
-        <p className="mt-2 text-sm text-slate-400">
+        <h1 className="text-lg font-bold">No such minigame</h1>
+        <p className="mt-2 text-sm font-medium text-ink-soft">
           Nothing is registered under <code>{gameId}</code>.
         </p>
         <Link to="/">
-          <Button className="mt-4" variant="secondary">
+          <Button variant="secondary" className="mt-4 w-full">
             Back to games
           </Button>
         </Link>
@@ -45,31 +52,40 @@ export function Play() {
   if (!seedParam) {
     return (
       <div className="flex flex-col gap-4">
-        <header>
-          <h1 className="text-2xl font-bold">
-            <span aria-hidden>{game.icon}</span> {game.title}
-          </h1>
-          <p className="mt-1 text-slate-400">{game.tagline}</p>
+        <header className="pt-2 text-center">
+          <span className="space inline-flex h-20 w-20 items-center justify-center bg-coin text-4xl">
+            {game.icon}
+          </span>
+          <h1 className="shout mt-3 text-4xl text-white">{game.title}</h1>
+          <p className="mt-1 font-semibold text-ink">{game.tagline}</p>
         </header>
 
         <Card>
-          <h2 className="text-sm font-semibold uppercase tracking-widest text-slate-400">
-            Difficulty
-          </h2>
+          <h2 className="text-sm font-bold uppercase tracking-widest text-ink-soft">Difficulty</h2>
           <div className="mt-3 grid grid-cols-3 gap-2">
             {DIFFICULTIES.map((level) => (
-              <Button
+              <button
                 key={level}
-                variant={level === difficulty ? 'primary' : 'secondary'}
+                type="button"
                 onClick={() => setParam('difficulty', level)}
+                aria-pressed={level === difficulty}
+                className={`chunky min-h-12 px-2 text-base font-bold capitalize
+                  focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-coin
+                  ${
+                    level === difficulty
+                      ? DIFFICULTY_COLOURS[level]
+                      : 'bg-card text-ink hover:bg-card-shade'
+                  }`}
               >
                 {level}
-              </Button>
+              </button>
             ))}
           </div>
         </Card>
 
-        <Button onClick={() => setParam('seed', randomSeed())}>Start round</Button>
+        <Button variant="coin" className="text-xl" onClick={() => setParam('seed', randomSeed())}>
+          ★ Start round
+        </Button>
         <Link to="/" className="self-center">
           <Button variant="ghost">Back to games</Button>
         </Link>
@@ -79,11 +95,11 @@ export function Play() {
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="flex items-center justify-between">
-        <Link to="/" className="text-sm text-slate-400 hover:text-slate-200">
+      <div className="flex items-center justify-between gap-2">
+        <Link to="/" className="text-sm font-bold text-ink hover:underline">
           ← Games
         </Link>
-        <span className="text-sm text-slate-500">
+        <span className="text-sm font-bold text-ink capitalize">
           {game.title} · {difficulty}
         </span>
       </div>

@@ -1,11 +1,11 @@
 /**
- * The chrome around every minigame: progress, timer, score, feedback and
- * the end-of-round summary. Written once so a new minigame is only its
- * own question screen.
+ * The chrome around every minigame: progress stars, timer, feedback and the
+ * end-of-round scoreboard. Written once so a new minigame is only its own
+ * question screen.
  */
 
 import { Link } from 'react-router-dom'
-import { Button, Card } from '@/ui/primitives'
+import { Banner, Button, Card, Star } from '@/ui/primitives'
 import { randomSeed } from '@/logic'
 import { useRound } from './useRound'
 import type { AnyMinigame, Difficulty } from './types'
@@ -22,10 +22,10 @@ export function RoundScreen({ game, difficulty, seed, onNewSeed }: RoundScreenPr
 
   if (round.error) {
     return (
-      <Card className="border-rose-800 bg-rose-950/40">
-        <h2 className="font-semibold text-rose-200">Something went wrong</h2>
-        <p className="mt-2 text-sm text-rose-200/80">{round.error}</p>
-        <Button className="mt-4" onClick={() => onNewSeed(randomSeed())}>
+      <Card className="bg-space-red text-white">
+        <h2 className="text-lg font-bold">Something went wrong</h2>
+        <p className="mt-2 text-sm">{round.error}</p>
+        <Button variant="coin" className="mt-4" onClick={() => onNewSeed(randomSeed())}>
           Try another round
         </Button>
       </Card>
@@ -33,22 +33,38 @@ export function RoundScreen({ game, difficulty, seed, onNewSeed }: RoundScreenPr
   }
 
   if (round.finished) {
+    const stars = Math.round(round.score)
     const percentage = Math.round((round.score / round.total) * 100)
+
     return (
       <Card className="text-center">
-        <p className="text-sm uppercase tracking-widest text-slate-400">Round complete</p>
-        <p className="mt-3 text-5xl font-bold text-indigo-300">{percentage}%</p>
-        <p className="mt-2 text-sm text-slate-400">
-          {round.correctCount} of {round.total} correct · seed{' '}
-          <code className="rounded bg-slate-800 px-1.5 py-0.5 text-xs">{seed}</code>
+        <p className="text-sm font-semibold uppercase tracking-widest text-ink-soft">
+          Round complete
         </p>
-        <div className="mt-6 flex flex-wrap justify-center gap-2">
-          <Button onClick={() => onNewSeed(randomSeed())}>Play again</Button>
+
+        <div className="mt-3 flex justify-center gap-1">
+          {Array.from({ length: round.total }, (_, i) => (
+            <Star key={i} earned={i < stars} className="h-9 w-9" />
+          ))}
+        </div>
+
+        <p className="shout mt-4 text-6xl text-coin">{percentage}%</p>
+        <p className="mt-2 text-sm text-ink-soft">
+          {round.correctCount} of {round.total} correct · seed{' '}
+          <code className="rounded-md bg-card-shade px-1.5 py-0.5 text-xs">{seed}</code>
+        </p>
+
+        <div className="mt-6 flex flex-col gap-2">
+          <Button variant="coin" onClick={() => onNewSeed(randomSeed())}>
+            Play again
+          </Button>
           <Button variant="secondary" onClick={() => round.restart()}>
             Retry this seed
           </Button>
           <Link to="/">
-            <Button variant="ghost">Back to games</Button>
+            <Button variant="ghost" className="w-full">
+              Back to games
+            </Button>
           </Link>
         </div>
       </Card>
@@ -56,29 +72,29 @@ export function RoundScreen({ game, difficulty, seed, onNewSeed }: RoundScreenPr
   }
 
   const { Screen } = game
-  const timeIsShort = round.secondsLeft !== null && round.secondsLeft <= 5
+  const timeIsShort = round.secondsLeft !== null && round.secondsLeft <= 10
 
   return (
     <div className="flex flex-col gap-4">
       <header className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-1.5" aria-label={`Question ${round.index + 1} of ${round.total}`}>
+        <div
+          className="flex items-center gap-0.5"
+          aria-label={`Question ${round.index + 1} of ${round.total}`}
+        >
           {Array.from({ length: round.total }, (_, i) => (
-            <span
-              key={i}
-              className={`h-1.5 w-6 rounded-full ${
-                i < round.index ? 'bg-indigo-500' : i === round.index ? 'bg-indigo-300' : 'bg-slate-800'
-              }`}
-            />
+            <Star key={i} earned={i < round.index} className={i === round.index ? 'scale-125' : ''} />
           ))}
         </div>
 
         {round.secondsLeft !== null && (
           <span
-            className={`tabular-nums text-sm font-semibold ${timeIsShort ? 'text-rose-400' : 'text-slate-400'}`}
+            className={`chunky flex h-11 min-w-16 items-center justify-center px-3 text-lg font-bold tabular-nums ${
+              timeIsShort ? 'bg-space-red text-white' : 'bg-card text-ink'
+            }`}
             role="timer"
             aria-live="off"
           >
-            {round.secondsLeft}s
+            {round.secondsLeft}
           </span>
         )}
       </header>
@@ -93,33 +109,21 @@ export function RoundScreen({ game, difficulty, seed, onNewSeed }: RoundScreenPr
       />
 
       {round.verdict ? (
-        <Card
-          className={
-            round.verdict.correct
-              ? 'border-emerald-700 bg-emerald-950/40'
-              : 'border-rose-800 bg-rose-950/40'
-          }
-        >
-          <div aria-live="polite">
-            <p
-              className={`font-semibold ${
-                round.verdict.correct ? 'text-emerald-300' : 'text-rose-300'
-              }`}
-            >
-              {round.verdict.correct ? '✓ ' : '✗ '}
+        <Banner tone={round.verdict.correct ? 'good' : 'bad'}>
+          <div aria-live="polite" className="text-white">
+            <p className="shout text-2xl">
+              {round.verdict.correct ? '★ ' : '✗ '}
               {round.verdict.message}
             </p>
-            {round.verdict.detail && (
-              <p className="mt-1 text-sm text-slate-300">{round.verdict.detail}</p>
-            )}
+            {round.verdict.detail && <p className="mt-2 text-sm font-medium">{round.verdict.detail}</p>}
             {game.explain && round.question !== null && (
-              <p className="mt-2 text-sm text-slate-400">{game.explain(round.question)}</p>
+              <p className="mt-1 text-sm font-medium opacity-90">{game.explain(round.question)}</p>
             )}
           </div>
-          <Button className="mt-4 w-full" onClick={round.next} autoFocus>
+          <Button variant="coin" className="mt-4 w-full" onClick={round.next} autoFocus>
             {round.index + 1 >= round.total ? 'See results' : 'Next question'}
           </Button>
-        </Card>
+        </Banner>
       ) : (
         <Button variant="ghost" className="self-center" onClick={round.reveal}>
           Skip — show me the answer

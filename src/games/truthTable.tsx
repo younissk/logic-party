@@ -21,7 +21,7 @@ import {
 } from '@/logic'
 import { defineMinigame } from '@/engine/registry'
 import type { Difficulty, GenerateContext, MinigameScreenProps, Verdict } from '@/engine/types'
-import { Button, Card, FormulaText } from '@/ui/primitives'
+import { Button, Card } from '@/ui/primitives'
 
 export interface TruthTableQuestion {
   formula: Formula
@@ -107,31 +107,38 @@ function Screen({ question, submit, locked, solution }: MinigameScreenProps<Trut
     setAnswer((previous) => previous.map((entry, i) => (i === index ? value : entry)))
   }
 
-  /** Tapping a cell cycles blank -> T -> F -> blank; fastest input on a phone. */
+  /** Tapping a space cycles blank -> T -> F -> blank; fastest input on a phone. */
   const cycle = (index: number) => {
     const current = answer[index]
     setRow(index, current === null ? true : current ? false : null)
   }
 
-  const complete = answer.every((entry) => entry !== null)
+  const remaining = answer.filter((entry) => entry === null).length
+
+  // A hard formula is long, and a long formula at 2xl wraps into fragments
+  // that are harder to read than the logic itself. Step the size down instead.
+  const printed = format(question.formula)
+  const formulaSize = printed.length > 32 ? 'text-lg' : printed.length > 22 ? 'text-xl' : 'text-2xl'
 
   return (
     <Card>
-      <p className="text-sm text-slate-400">Fill in the truth table for</p>
-      <p className="mt-1 text-2xl">
-        <FormulaText formula={question.formula} />
+      <p className="text-sm font-semibold uppercase tracking-widest text-ink-soft">
+        Fill in the truth table
+      </p>
+      <p className={`formula mt-1 leading-snug font-semibold text-balance text-ink ${formulaSize}`}>
+        {printed}
       </p>
 
-      <table className="mt-4 w-full border-collapse text-center">
+      <table className="mt-4 w-full border-collapse">
         <thead>
-          <tr className="text-slate-400">
+          <tr>
             {question.variables.map((name) => (
-              <th key={name} className="formula pb-2 text-base font-normal">
+              <th key={name} className="formula w-10 pb-2 text-lg font-semibold text-ink-soft">
                 {name}
               </th>
             ))}
-            <th className="formula border-l border-slate-700 pb-2 pl-3 text-base font-normal text-slate-200">
-              {format(question.formula)}
+            <th className="pb-2 pl-3 text-right text-xs font-semibold uppercase tracking-wider text-ink-soft">
+              Your answer
             </th>
           </tr>
         </thead>
@@ -142,36 +149,44 @@ function Screen({ question, submit, locked, solution }: MinigameScreenProps<Trut
             const isWrong = locked && expected !== undefined && given !== expected
 
             return (
-              <tr key={rowIndex} className="border-t border-slate-800">
+              <tr key={rowIndex} className="border-t-2 border-dashed border-card-shade">
                 {question.variables.map((name) => (
-                  <td key={name} className="formula py-2 text-slate-400">
-                    {assignment[name] ? 'T' : 'F'}
+                  <td key={name} className="py-2 text-center">
+                    <span
+                      className={`formula inline-flex h-7 w-7 items-center justify-center rounded-full text-sm font-bold text-white ${
+                        assignment[name] ? 'bg-space-blue/70' : 'bg-space-red/70'
+                      }`}
+                    >
+                      {assignment[name] ? 'T' : 'F'}
+                    </span>
                   </td>
                 ))}
-                <td className="border-l border-slate-700 py-1.5 pl-3">
-                  <button
-                    type="button"
-                    onClick={() => cycle(rowIndex)}
-                    disabled={locked}
-                    aria-label={`Row ${rowIndex + 1}: ${showAssignment(assignment)}`}
-                    className={`h-10 w-14 rounded-lg border text-base font-bold transition-colors
-                      ${
-                        isWrong
-                          ? 'border-rose-500 bg-rose-500/10 text-rose-300'
-                          : given === null
-                            ? 'border-dashed border-slate-600 text-slate-600'
-                            : given
-                              ? 'border-emerald-600 bg-emerald-500/10 text-emerald-300'
-                              : 'border-slate-500 bg-slate-700/40 text-slate-200'
-                      }`}
-                  >
-                    {given === null ? '·' : given ? 'T' : 'F'}
+
+                <td className="py-1.5 pl-3">
+                  <div className="flex items-center justify-end gap-2">
                     {isWrong && expected !== undefined && (
-                      <span className="ml-1 text-xs font-normal text-rose-400">
-                        ({expected ? 'T' : 'F'})
+                      <span className="whitespace-nowrap text-sm font-bold text-space-red">
+                        should be {expected ? 'T' : 'F'}
                       </span>
                     )}
-                  </button>
+                    <button
+                      type="button"
+                      onClick={() => cycle(rowIndex)}
+                      disabled={locked}
+                      aria-label={`Row ${rowIndex + 1}: ${showAssignment(assignment)}`}
+                      className={`space h-12 w-12 shrink-0 text-xl font-bold
+                        ${
+                          given === null
+                            ? 'border-dashed bg-card-shade text-ink-soft'
+                            : given
+                              ? 'bg-space-blue text-white'
+                              : 'bg-space-red text-white'
+                        }
+                        ${isWrong ? 'opacity-60' : ''}`}
+                    >
+                      {given === null ? '?' : given ? 'T' : 'F'}
+                    </button>
+                  </div>
                 </td>
               </tr>
             )
@@ -180,8 +195,8 @@ function Screen({ question, submit, locked, solution }: MinigameScreenProps<Trut
       </table>
 
       {!locked && (
-        <Button className="mt-4 w-full" disabled={!complete} onClick={() => submit(answer)}>
-          {complete ? 'Check my table' : `${answer.filter((e) => e === null).length} rows left`}
+        <Button variant="coin" className="mt-5 w-full" disabled={remaining > 0} onClick={() => submit(answer)}>
+          {remaining === 0 ? 'Check my table' : `${remaining} space${remaining === 1 ? '' : 's'} left`}
         </Button>
       )}
     </Card>
