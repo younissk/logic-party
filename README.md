@@ -28,6 +28,42 @@ Three rules the codebase follows:
    The generator refuses formulas with fictitious variables or operands
    combined with themselves.
 
+## Round format
+
+Time attack. One clock for the whole round, unlimited questions, and the clock
+keeps running while feedback is on screen — so reading the explanation is a
+real decision rather than a free pause.
+
+| | |
+|---|---|
+| Correct | **+100**, plus **+25** per consecutive correct beyond the first (bonus capped at +100) |
+| Wrong or skipped | **−50**, flat |
+| Score floor | 0 — a bad run cannot bury the score so deep the rest stops mattering |
+
+The penalty is flat rather than scaled by partial credit: it has to be felt for
+rushing to carry real risk. Partial credit is still recorded against the topic,
+it just does not soften the hit. All four numbers live in `SCORING` in
+`src/engine/types.ts`.
+
+Minigames where rushing defeats the point — building a natural deduction proof,
+say — can set `format: 'fixed'` instead for a set number of questions.
+
+## Leaderboard
+
+Local, and against yourself: best score per game *and* difficulty, in
+localStorage. A hard 800 is not a lesser easy 900, so they are ranked
+separately.
+
+**Web3Forms does not work for this**, if you were wondering. Its read API is a
+PRO feature needing a *secret* Bearer key, and a static app has nowhere to hide
+one — ship it in the bundle and anyone can pull every submission. The write
+side takes a public access key with no validation, so anyone could post fake
+scores. It is a contact-form-to-email service: no sorting, no top-N, no upsert.
+
+If a real shared leaderboard is ever wanted, the right shape is Supabase (or
+similar): Postgres, a public anon key, and row-level security allowing insert
+but not update or delete.
+
 ## Look
 
 Party-board styling: blue and red spaces, gold stars and coins on a bright
@@ -71,16 +107,21 @@ Screen                          // the React component the player interacts with
 
 Then add one line to `MINIGAMES` in [`src/engine/registry.ts`](src/engine/registry.ts).
 
-Nothing else needs to change. Timing, scoring, progress recording, feedback,
-the reveal button, the results screen and the URL seed all come from the
-runner.
+Nothing else needs to change. The clock, scoring, combos, progress recording,
+feedback, confetti, the reveal button, the results screen, high scores and the
+URL seed all come from the runner.
 
-Two things to get right:
+Three things to get right:
 
 - **`check` must give partial credit** where the exercise has parts. Seven of
   eight table rows is not the same as guessing.
 - **Filter degenerate questions** in `generate`, using a predicate passed to
   `randomFormulaWhere`. A question that looks hard but is not teaches nothing.
+  `repeatsAnOperand` and `dependsOnAllVariables` are the two filters that catch
+  most of it.
+- **Provide `questionKey`** so a round does not deal the same question twice.
+  A time-attack round asks a lot of questions and an easy pool is small, so
+  without it repeats do happen — jarring, and farmable.
 
 ## Reproducibility
 

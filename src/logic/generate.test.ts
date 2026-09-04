@@ -1,48 +1,15 @@
 import { describe, expect, it } from 'vitest'
-import type { Formula } from './ast'
-import { equals, sortedVariables, depth as formulaDepth } from './ast'
+import { sortedVariables, depth as formulaDepth } from './ast'
 import {
   FORMULA_PROFILES,
   GenerationFailedError,
   randomFormula,
   randomFormulaWhere,
+  repeatsAnOperand,
 } from './generate'
 import { makeRng } from './rng'
 import { classify, isTautology } from './semantics'
 import { format } from './print'
-
-/**
- * Does any node combine an operand with *itself*?
- *
- * Checked on the AST, not the printed string: `(r ∨ q) → q` contains the text
- * "q → q" but is a perfectly good formula, whereas `r ∨ q ∨ q` is not.
- */
-const chainOperands = (formula: Formula, kind: 'and' | 'or'): Formula[] =>
-  formula.kind === kind
-    ? [...chainOperands(formula.left, kind), ...chainOperands(formula.right, kind)]
-    : [formula]
-
-function repeatsAnOperand(formula: Formula): boolean {
-  switch (formula.kind) {
-    case 'var':
-    case 'const':
-      return false
-    case 'not':
-      return repeatsAnOperand(formula.arg)
-    default: {
-      const operands =
-        formula.kind === 'and' || formula.kind === 'or'
-          ? [
-              ...chainOperands(formula.left, formula.kind),
-              ...chainOperands(formula.right, formula.kind),
-            ]
-          : [formula.left, formula.right]
-
-      const duplicated = operands.some((a, i) => operands.some((b, j) => i < j && equals(a, b)))
-      return duplicated || repeatsAnOperand(formula.left) || repeatsAnOperand(formula.right)
-    }
-  }
-}
 
 describe('randomFormula', () => {
   it('is reproducible from its seed', () => {

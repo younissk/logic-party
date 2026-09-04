@@ -4,7 +4,9 @@ import { RoundScreen } from '@/engine/RoundScreen'
 import { DIFFICULTIES } from '@/engine/types'
 import type { Difficulty } from '@/engine/types'
 import { randomSeed } from '@/logic'
-import { Button, Card } from '@/ui/primitives'
+import { Button, Card, Star } from '@/ui/primitives'
+import { getHighScore, useProgress } from '@/store/progress'
+import { DEFAULT_ROUND_SECONDS } from '@/engine/types'
 
 const isDifficulty = (value: string | null): value is Difficulty =>
   value !== null && (DIFFICULTIES as readonly string[]).includes(value)
@@ -20,6 +22,7 @@ export function Play() {
   const { gameId = '' } = useParams()
   const [params, setParams] = useSearchParams()
   const game = getMinigame(gameId)
+  const progress = useProgress()
 
   // Seed and difficulty live in the URL, so a round is shareable and a
   // disputed question can be reproduced exactly.
@@ -50,6 +53,9 @@ export function Play() {
   }
 
   if (!seedParam) {
+    const best = getHighScore(game.id, difficulty, progress)
+    const seconds = game.roundSeconds ?? DEFAULT_ROUND_SECONDS
+
     return (
       <div className="flex flex-col gap-4">
         <header className="pt-2 text-center">
@@ -59,6 +65,20 @@ export function Play() {
           <h1 className="shout mt-3 text-4xl text-white">{game.title}</h1>
           <p className="mt-1 font-semibold text-ink">{game.tagline}</p>
         </header>
+
+        <Card className="bg-card text-center">
+          <p className="text-sm font-bold uppercase tracking-widest text-ink-soft">
+            Your best on {difficulty}
+          </p>
+          <p className="shout mt-1 flex items-center justify-center gap-2 text-4xl text-coin">
+            <Star earned className="h-7 w-7" />
+            {best}
+          </p>
+          <p className="mt-2 text-sm font-semibold text-ink-soft">
+            {seconds} seconds · +100 per correct answer, −50 for a wrong one, combo bonus for a
+            streak. Beat your own record.
+          </p>
+        </Card>
 
         <Card>
           <h2 className="text-sm font-bold uppercase tracking-widest text-ink-soft">Difficulty</h2>

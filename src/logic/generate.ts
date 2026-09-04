@@ -114,6 +114,41 @@ function build(rng: Rng, options: ResolvedOptions, depth: number): Formula {
   return { kind, left, right }
 }
 
+/**
+ * Does any node in the formula combine an operand with *itself*?
+ *
+ * `r ∨ q ∨ q` and `p ↔ p` are noise: they inflate a formula without making it
+ * harder, and usually collapse it to something trivial. ∧ and ∨ are
+ * associative, so the duplicate has to be looked for across the whole chain —
+ * `(a ∨ q) ∨ q` repeats an operand even though its two direct children differ.
+ *
+ * `build` already avoids this while generating, but it cannot always succeed:
+ * a three-operand chain over a two-variable pool has no non-repeating form.
+ * Callers that need the guarantee should pass this to `randomFormulaWhere`,
+ * which simply draws again.
+ */
+export function repeatsAnOperand(formula: Formula): boolean {
+  const chain = (f: Formula, kind: 'and' | 'or'): Formula[] =>
+    f.kind === kind ? [...chain(f.left, kind), ...chain(f.right, kind)] : [f]
+
+  switch (formula.kind) {
+    case 'var':
+    case 'const':
+      return false
+    case 'not':
+      return repeatsAnOperand(formula.arg)
+    default: {
+      const parts =
+        formula.kind === 'and' || formula.kind === 'or'
+          ? [...chain(formula.left, formula.kind), ...chain(formula.right, formula.kind)]
+          : [formula.left, formula.right]
+
+      const duplicated = parts.some((a, i) => parts.some((b, j) => i < j && equals(a, b)))
+      return duplicated || repeatsAnOperand(formula.left) || repeatsAnOperand(formula.right)
+    }
+  }
+}
+
 export function randomFormula(rng: Rng, options: GenerateOptions = {}): Formula {
   const resolved = resolve(options)
 

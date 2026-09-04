@@ -1,9 +1,10 @@
 import { Link } from 'react-router-dom'
 import { MINIGAMES, coveredTopics } from '@/engine/registry'
-import { TOPIC_LABELS } from '@/engine/types'
-import { Card } from '@/ui/primitives'
+import { DIFFICULTIES, TOPIC_LABELS } from '@/engine/types'
+import { Card, Star } from '@/ui/primitives'
 import {
   currentStreak,
+  getHighScore,
   overallStats,
   statsForGame,
   useProgress,
@@ -56,6 +57,10 @@ export function Home() {
         <h2 className="shout text-center text-2xl text-white">Minigames</h2>
         {MINIGAMES.map((game) => {
           const gameStats = statsForGame(game.id, progress)
+          // One card, three difficulties — show the best score of any of them.
+          const best = Math.max(
+            ...DIFFICULTIES.map((level) => getHighScore(game.id, level, progress)),
+          )
           return (
             <Link key={game.id} to={`/play/${game.id}`} className="block active:translate-y-1">
               <Card className="hover:bg-card-shade">
@@ -74,6 +79,12 @@ export function Home() {
                       {gameStats.attempts > 0 &&
                         ` — ${Math.round(gameStats.accuracy * 100)}% over ${gameStats.attempts}`}
                     </p>
+                    {best > 0 && (
+                      <p className="mt-1 flex items-center gap-1 text-sm font-bold text-ink">
+                        <Star earned className="h-5 w-5" />
+                        Best {best}
+                      </p>
+                    )}
                   </div>
                 </div>
               </Card>

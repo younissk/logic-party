@@ -74,6 +74,37 @@ export interface MinigameScreenProps<Question, Answer> {
   solution: Answer | null
 }
 
+/**
+ * How a round is structured.
+ *
+ * 'time-attack' is the default and the house format: one clock for the whole
+ * round, unlimited questions, points for correct answers and a penalty for
+ * wrong ones. You are playing against your own best score.
+ *
+ * 'fixed' is for exercises where rushing defeats the point — building a
+ * natural deduction proof, say. A set number of questions, each with its own
+ * optional clock.
+ */
+export type RoundFormat = 'time-attack' | 'fixed'
+
+/** Seconds in a time-attack round when a minigame does not say otherwise. */
+export const DEFAULT_ROUND_SECONDS = 120
+
+export const SCORING = {
+  /** Awarded for a correct answer, before any combo bonus. */
+  correct: 100,
+  /**
+   * Flat deduction for a wrong answer. Flat rather than scaled by partial
+   * credit: the penalty has to be felt to make rushing a real risk. Partial
+   * credit is still recorded against the topic, it just does not soften this.
+   */
+  wrong: 50,
+  /** Added per consecutive correct answer beyond the first. */
+  comboStep: 25,
+  /** Ceiling on the combo bonus, so a long streak cannot run away with it. */
+  maxComboBonus: 100,
+} as const
+
 export interface Minigame<Question = unknown, Answer = unknown> {
   /** Stable identifier — used in URLs and saved progress, so never rename it. */
   readonly id: string
@@ -84,8 +115,15 @@ export interface Minigame<Question = unknown, Answer = unknown> {
   /** Emoji shown on the game card and party board. */
   readonly icon: string
 
-  /** Seconds per question; null means untimed. */
+  /** Defaults to 'time-attack'. */
+  readonly format?: RoundFormat
+
+  /** time-attack: seconds for the whole round. */
+  readonly roundSeconds?: number
+
+  /** fixed: seconds per question; null means untimed. */
   readonly secondsPerQuestion?: number | null
+  /** fixed: how many questions a round contains. */
   readonly questionsPerRound?: number
 
   generate(context: GenerateContext): Question
@@ -95,6 +133,16 @@ export interface Minigame<Question = unknown, Answer = unknown> {
   solve(question: Question): Answer
   /** Optional worked explanation shown after the answer is revealed. */
   explain?(question: Question): string
+
+  /**
+   * Identity of a question, for avoiding repeats inside one round.
+   *
+   * A time-attack round asks as many questions as the clock allows, and the
+   * space an easy difficulty draws from is small, so the same question does
+   * come up twice. That is jarring, and worse, farmable. When a minigame
+   * provides this the runner re-draws until it gets something new.
+   */
+  questionKey?(question: Question): string
 
   readonly Screen: ComponentType<MinigameScreenProps<Question, Answer>>
 }

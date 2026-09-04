@@ -37,9 +37,11 @@ export interface Attempt {
 export interface ProgressState {
   version: 1
   attempts: Attempt[]
+  /** Best time-attack score, keyed by `gameId:difficulty`. */
+  highScores: Record<string, number>
 }
 
-const EMPTY: ProgressState = { version: 1, attempts: [] }
+const EMPTY: ProgressState = { version: 1, attempts: [], highScores: {} }
 
 function readStorage(): ProgressState {
   try {
@@ -52,7 +54,13 @@ function readStorage(): ProgressState {
       'attempts' in parsed &&
       Array.isArray((parsed as ProgressState).attempts)
     ) {
-      return { version: 1, attempts: (parsed as ProgressState).attempts }
+      const state = parsed as Partial<ProgressState>
+      // highScores was added after the first release; saved data may predate it.
+      return {
+        version: 1,
+        attempts: state.attempts ?? [],
+        highScores: state.highScores ?? {},
+      }
     }
     return EMPTY
   } catch {
@@ -85,7 +93,32 @@ export function subscribe(listener: () => void): () => void {
 
 export function recordAttempt(attempt: Attempt): void {
   const attempts = [...state.attempts, attempt].slice(-MAX_ATTEMPTS)
-  commit({ version: 1, attempts })
+  commit({ ...state, attempts })
+}
+
+// ---------------------------------------------------------------------------
+// High scores — the leaderboard you play against yourself
+// ---------------------------------------------------------------------------
+
+/** Scores are per difficulty: a hard 800 is not a lesser easy 900. */
+export const highScoreKey = (gameId: string, difficulty: Difficulty): string =>
+  `${gameId}:${difficulty}`
+
+export function getHighScore(
+  gameId: string,
+  difficulty: Difficulty,
+  progress: ProgressState = state,
+): number {
+  return progress.highScores[highScoreKey(gameId, difficulty)] ?? 0
+}
+
+/** Saves the score if it beats the stored best. Returns true when it did. */
+export function submitScore(gameId: string, difficulty: Difficulty, score: number): boolean {
+  const key = highScoreKey(gameId, difficulty)
+  const previous = state.highScores[key] ?? 0
+  if (score <= previous) return false
+  commit({ ...state, highScores: { ...state.highScores, [key]: score } })
+  return true
 }
 
 export function clearProgress(): void {

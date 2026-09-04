@@ -16,6 +16,7 @@ import {
   evaluate,
   format,
   randomFormulaWhere,
+  repeatsAnOperand,
   showAssignment,
   sortedVariables,
 } from '@/logic'
@@ -57,8 +58,13 @@ function generate({ rng, difficulty }: GenerateContext): TruthTableQuestion {
     //   - a tautology or contradiction is one repeated value, guessable
     //     without reading the formula at all;
     //   - a formula with a fictitious variable looks hard and is not, e.g.
-    //     ((p → q) ∨ q) ∧ q, which is just q.
-    (candidate) => classify(candidate) === 'contingent' && dependsOnAllVariables(candidate),
+    //     ((p → q) ∨ q) ∧ q, which is just q;
+    //   - a repeated operand (q ∨ p ∨ p) is padding, and the generator cannot
+    //     always avoid it on its own with a two-variable pool.
+    (candidate) =>
+      classify(candidate) === 'contingent' &&
+      dependsOnAllVariables(candidate) &&
+      !repeatsAnOperand(candidate),
   )
 
   const variables = sortedVariables(formula)
@@ -209,10 +215,12 @@ export const truthTableGame = defineMinigame<TruthTableQuestion, TruthTableAnswe
   tagline: 'Fill in the column before the clock runs out.',
   topics: ['truth-tables'],
   icon: '🧮',
-  secondsPerQuestion: 120,
-  questionsPerRound: 5,
+  format: 'time-attack',
+  roundSeconds: 120,
   generate,
   check,
   solve,
   Screen,
+  // Two questions are the same question exactly when the formula is.
+  questionKey: (question) => format(question.formula),
 })
