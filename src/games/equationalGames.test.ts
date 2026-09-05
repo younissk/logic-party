@@ -10,6 +10,11 @@ import { DIFFICULTIES, type Difficulty, type GenerateContext } from '@/engine/ty
 import { termFlatGame } from './termFlat'
 import { goalHolds, metGoals, termBuildGame } from './termBuild'
 import { interpretationGame, valuesOf } from './interpretationGame'
+import { compositionGame, composedOf } from './composition'
+import { matchingGame } from './matching'
+import { mguGame } from './mgu'
+import { replay } from './unifyDriver'
+import { moreGeneral, showTerm, substitutionDomain, unify } from '@/logic'
 import { slotToTerm, hole } from '@/ui/TermBuilder'
 import {
   INTERPRETATIONS,
@@ -241,5 +246,172 @@ describe('Give It Meaning', () => {
     const verdict = interpretationGame.check(question, { values: null })
     expect(verdict.correct).toBe(false)
     expect(verdict.message).toBe('It does not hold here')
+  })
+})
+
+describe('Compose It', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the composition correct on ${difficulty}`, () => {
+      for (const question of sample(compositionGame, difficulty)) {
+        const verdict = compositionGame.check(question, compositionGame.solve(question))
+        expect([JSON.stringify(question.outer), verdict.correct]).toEqual([
+          JSON.stringify(question.outer),
+          true,
+        ])
+      }
+    })
+
+    it(`asks only for variables the composition actually moves on ${difficulty}`, () => {
+      for (const question of sample(compositionGame, difficulty)) {
+        expect(question.domain).toEqual(substitutionDomain(composedOf(question)))
+        expect(question.domain.length).toBeGreaterThanOrEqual(2)
+      }
+    })
+  }
+
+  it('refuses an unfinished image', () => {
+    const question = compositionGame.generate({ rng: makeRng('c1'), difficulty: 'medium', questionIndex: 0 })
+    const verdict = compositionGame.check(question, {})
+    expect(verdict.correct).toBe(false)
+  })
+
+  it('refuses the other order', () => {
+    const question = {
+      signature: { f: 1 } as Signature,
+      variables: ['x', 'y'],
+      outer: { x: 'y' },
+      inner: { y: 'f(x)' },
+      domain: ['x', 'y'],
+    }
+    // σ′ ∘ σ is {x ↦ f(x), y ↦ f(x)} — a different substitution.
+    const wrong = {
+      x: { kind: 'fn' as const, name: 'f', args: [{ kind: 'var' as const, name: 'x' }] },
+      y: { kind: 'fn' as const, name: 'f', args: [{ kind: 'var' as const, name: 'x' }] },
+    }
+    expect(compositionGame.check(question, wrong).correct).toBe(false)
+  })
+
+  it('never names the answer in the retry message', () => {
+    for (const difficulty of DIFFICULTIES) {
+      for (const question of sample(compositionGame, difficulty)) {
+        const verdict = compositionGame.check(question, {})
+        const composed = composedOf(question)
+        for (const name of question.domain) {
+          expect(verdict.message).not.toContain(showTerm(composed[name] as never))
+        }
+      }
+    }
+  })
+})
+
+describe('Run The Matcher', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the algorithm's own run correct on ${difficulty}`, () => {
+      for (const question of sample(matchingGame, difficulty)) {
+        const verdict = matchingGame.check(question, matchingGame.solve(question))
+        expect([question.pattern, question.target, verdict.correct]).toEqual([
+          question.pattern,
+          question.target,
+          true,
+        ])
+      }
+    })
+
+    it(`stores a verdict that matches moreGeneral on ${difficulty}`, () => {
+      for (const question of sample(matchingGame, difficulty)) {
+        const pattern = parseTerm(question.pattern, question.signature)
+        const target = parseTerm(question.target, question.signature)
+        expect([question.pattern, question.matches]).toEqual([
+          question.pattern,
+          moreGeneral(pattern, target),
+        ])
+      }
+    })
+  }
+
+  it('asks both answers across a round', () => {
+    const seen = new Set(
+      DIFFICULTIES.flatMap((difficulty) =>
+        sample(matchingGame, difficulty).map((question) => question.matches),
+      ),
+    )
+    expect(seen).toEqual(new Set([true, false]))
+  })
+
+  it('refuses stopping early', () => {
+    const question = matchingGame.generate({ rng: makeRng('m1'), difficulty: 'medium', questionIndex: 0 })
+    const verdict = matchingGame.check(question, [])
+    expect(verdict.correct).toBe(false)
+    expect(verdict.message).toContain('finished')
+  })
+
+  it('refuses a move the rules do not allow', () => {
+    // Binding on the right is never legal in matching.
+    const question = matchingGame.generate({ rng: makeRng('m2'), difficulty: 'medium', questionIndex: 0 })
+    const verdict = matchingGame.check(question, [{ kind: 'bind', side: 'right' }])
+    expect(verdict.correct).toBe(false)
+  })
+
+  it('never lets a wrong ending pass', () => {
+    for (const question of sample(matchingGame, 'medium')) {
+      const pattern = parseTerm(question.pattern, question.signature)
+      const target = parseTerm(question.target, question.signature)
+      const state = replay('match', pattern, target, matchingGame.solve(question))
+      expect(state.outcome === 'unified').toBe(question.matches)
+    }
+  })
+})
+
+describe('Unify It', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the algorithm's own run correct on ${difficulty}`, () => {
+      for (const question of sample(mguGame, difficulty)) {
+        const verdict = mguGame.check(question, mguGame.solve(question))
+        expect([question.left, question.right, verdict.correct]).toEqual([
+          question.left,
+          question.right,
+          true,
+        ])
+      }
+    })
+
+    it(`stores the ending unify agrees with on ${difficulty}`, () => {
+      for (const question of sample(mguGame, difficulty)) {
+        const result = unify(
+          parseTerm(question.left, question.signature),
+          parseTerm(question.right, question.signature),
+        )
+        const ending = result.unified ? 'unified' : result.failure.reason
+        expect([question.left, question.outcome]).toEqual([question.left, ending])
+      }
+    })
+  }
+
+  it('asks all three endings across a round', () => {
+    const endings = new Set(
+      DIFFICULTIES.flatMap((difficulty) =>
+        sample(mguGame, difficulty).map((question) => question.outcome),
+      ),
+    )
+    expect(endings.size).toBeGreaterThanOrEqual(2)
+    expect(endings.has('occurs')).toBe(true)
+  })
+
+  it('marks the wrong failure wrong, even though "no unifier" was right', () => {
+    const clash = sample(mguGame, 'medium').find((question) => question.outcome === 'clash')
+    if (clash !== undefined) {
+      const verdict = mguGame.check(clash, [{ kind: 'occurs' }])
+      expect(verdict.correct).toBe(false)
+    }
+  })
+
+  it('never names the substitution in the retry message', () => {
+    for (const difficulty of DIFFICULTIES) {
+      for (const question of sample(mguGame, difficulty)) {
+        const verdict = mguGame.check(question, [])
+        expect(verdict.correct).toBe(false)
+        expect(verdict.message).not.toContain('↦')
+      }
+    }
   })
 })

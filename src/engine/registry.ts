@@ -27,6 +27,9 @@ import { refutationGame } from '@/games/refutation'
 import { rupBuilderGame } from '@/games/rupBuilder'
 import { rupGame } from '@/games/rupProof'
 import { resolventsGame } from '@/games/resolvents'
+import { compositionGame } from '@/games/composition'
+import { matchingGame } from '@/games/matching'
+import { mguGame } from '@/games/mgu'
 import { interpretationGame } from '@/games/interpretationGame'
 import { termBuildGame } from '@/games/termBuild'
 import { termFlatGame } from '@/games/termFlat'
@@ -66,6 +69,9 @@ export const MINIGAMES: readonly AnyMinigame[] = [
   termFlatGame,
   termBuildGame,
   interpretationGame,
+  compositionGame,
+  matchingGame,
+  mguGame,
 ]
 
 export function getMinigame(id: string): AnyMinigame | undefined {
