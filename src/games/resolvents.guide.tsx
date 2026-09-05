@@ -105,22 +105,18 @@ export function ResolventsGuide() {
           <Prose>
             <ul className="flex list-disc flex-col gap-2 pl-5">
               <li>
-                Tick every candidate reachable in <strong>one</strong> resolution step. Tautological
-                ones count.
+                <strong>Produce</strong> them rather than recognise them: tap two clauses and the
+                resolvent deals itself into your tray. Find them all.
               </li>
               <li>
-                Every question has at least one tautological resolvent, so if you have ticked none
-                you have missed something.
+                Two clauses clashing on two variables ask you which pivot — that is two separate
+                resolvents, and cancelling both at once is not a move the board has.
               </li>
               <li>
-                The wrong answers on offer are the mistakes people actually make: both pivots
-                cancelled at once, the two clauses merged with nothing cancelled, a literal dropped,
-                a sign flipped.
+                Every question has at least one tautological resolvent, and it counts. If your tray
+                has none you have missed something.
               </li>
-              <li>
-                Partial credit applies, but a wrong tick costs as much as a miss — guessing broadly
-                is worse than answering carefully.
-              </li>
+              <li>Partial credit for a tray that is short, so a near-miss still scores.</li>
             </ul>
           </Prose>
         </Card>

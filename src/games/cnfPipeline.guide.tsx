@@ -181,21 +181,20 @@ export function CnfPipelineGuide() {
           <Prose>
             <ul className="flex list-disc flex-col gap-2 pl-5">
               <li>
-                One tap per question. The buttons carry the rules, so you are never asked to recall
-                a rewrite — only to see which one fires.
+                Tap a rule and it applies to the whole formula. Keep going until it is CNF — the
+                buttons carry the rules, so nothing is a recall test.
               </li>
               <li>
-                Formulas are caught at a random point of a real run, including at the very start and
-                at the very end. “Done” is a real answer roughly as often as any other.
+                <strong>A rule out of turn does nothing at all</strong>, and says so. That is not
+                the game being strict: it is what happens on paper, and it is why the order is the
+                algorithm rather than a preference.
               </li>
               <li>
-                After you answer, the result of the correct move is shown — with the clause count
-                and the growth, so step 4 is felt rather than described.
+                Every question needs at least one move, and its par is the length of the ladder from
+                where it starts. Wasted taps cost score, not correctness.
               </li>
               <li>
-                <strong>Sprint</strong> charges <strong>10 seconds</strong> per wrong attempt rather
-                than the usual 5: with six options and no advance until you are right, a cheaper
-                penalty would make guessing quicker than reading the formula.
+                Watch the node count at step 4. That is the blowup, live.
               </li>
             </ul>
           </Prose>

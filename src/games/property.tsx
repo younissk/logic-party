@@ -11,6 +11,7 @@
  * the questions. The middle option says "satisfiable, not valid" instead.
  */
 
+import { useEffect, useState } from 'react'
 import type { Assignment, Classification, Formula, Rng } from '@/logic'
 import {
   and,
@@ -18,6 +19,7 @@ import {
   classify,
   countModels,
   dependsOnAllVariables,
+  evaluate,
   findCounterexample,
   findModel,
   format,
@@ -36,15 +38,32 @@ import {
 import { defineMinigame } from '@/engine/registry'
 import type { Difficulty, GenerateContext, MinigameScreenProps, Verdict } from '@/engine/types'
 import { Button, Card } from '@/ui/primitives'
-import { FormulaText } from '@/ui/FormulaText'
+import { Pop } from '@/ui/motion'
+import { WitnessHunt, type Banked } from '@/ui/WitnessHunt'
 import { PropertyGuide } from './property.guide'
 
 /**
- * The answer is the classification itself, so there is exactly one source of
- * truth for what a formula is: `classify`. The game cannot mark against a
- * different notion of validity than the rest of the app uses.
+ * The answer is the *evidence*, not the label.
+ *
+ * Definition 2.6 is stated in witnesses — satisfiable means there is an
+ * assignment making it true, refutable means there is one making it false —
+ * so the game asks for those two rows rather than for the word that describes
+ * having them. The classification falls out of which ones exist, which is why
+ * naming it was never the interesting half.
+ *
+ * `null` for a slot is the claim that no such assignment exists, and that is a
+ * real answer: it is what makes a formula valid or unsatisfiable.
  */
-export type PropertyAnswer = Classification
+export interface PropertyAnswer {
+  /** A row making it true, or null for "there is none". */
+  model: Assignment | null
+  /** A row making it false, or null for "there is none". */
+  counter: Assignment | null
+}
+
+/** What a completed hunt says the formula is. */
+export const classifyFromWitnesses = (answer: PropertyAnswer): Classification =>
+  answer.model === null ? 'contradiction' : answer.counter === null ? 'tautology' : 'contingent'
 
 export interface PropertyQuestion {
   formula: Formula
@@ -67,11 +86,6 @@ export const PROPERTY_LABELS: Readonly<Record<Classification, string>> = {
   contradiction: 'Unsatisfiable',
 }
 
-const PROPERTY_HINTS: Readonly<Record<Classification, string>> = {
-  tautology: 'True under every assignment',
-  contingent: 'True under some, false under others',
-  contradiction: 'False under every assignment',
-}
 
 // ---------------------------------------------------------------------------
 // Generation
@@ -313,7 +327,10 @@ function generate({ rng, difficulty }: GenerateContext): PropertyQuestion {
 // Marking
 // ---------------------------------------------------------------------------
 
-const solve = (question: PropertyQuestion): PropertyAnswer => classify(question.formula)
+const solve = (question: PropertyQuestion): PropertyAnswer => ({
+  model: findModel(question.formula),
+  counter: findCounterexample(question.formula),
+})
 
 /** The evidence for the answer, in the form Definition 2.6 asks for. */
 function witness(formula: Formula, truth: Classification): string {
@@ -341,25 +358,40 @@ function witness(formula: Formula, truth: Classification): string {
 }
 
 function check(question: PropertyQuestion, answer: PropertyAnswer): Verdict {
-  const truth = solve(question)
+  const truth = classify(question.formula)
 
-  if (answer === truth) {
+  // Each half is checked on its own terms: a banked row has to actually do
+  // what it claims, and a "there is none" has to actually be true.
+  const wrong = (slot: 'model' | 'counter'): string | null => {
+    const banked = answer[slot]
+    const wanted = slot === 'model'
+    if (banked !== null) {
+      return evaluate(question.formula, banked) === wanted
+        ? null
+        : `${showAssignment(banked)} makes it ${wanted ? 'false' : 'true'}, not ${wanted ? 'true' : 'false'}.`
+    }
+    const real = wanted ? findModel(question.formula) : findCounterexample(question.formula)
+    return real === null
+      ? null
+      : `There is one after all: ${showAssignment(real)} makes it ${wanted ? 'true' : 'false'}.`
+  }
+
+  const modelProblem = wrong('model')
+  const counterProblem = wrong('counter')
+
+  if (modelProblem !== null || counterProblem !== null) {
     return {
-      correct: true,
-      message: PROPERTY_LABELS[truth],
-      detail: witness(question.formula, truth),
+      correct: false,
+      score: modelProblem === null || counterProblem === null ? 0.5 : 0,
+      message: modelProblem !== null ? 'That is not a model' : 'That is not a counter-model',
+      detail: [modelProblem, counterProblem].filter((entry) => entry !== null).join(' '),
     }
   }
 
   return {
-    correct: false,
-    // A pure function of what you picked, never of what the answer is: in
-    // sprint this message is the only feedback shown before you try again, and
-    // with three options anything that narrowed the field would hand the
-    // question over. The quotes are load-bearing — "Not satisfiable, not
-    // valid" without them reads as a claim that the formula is unsatisfiable.
-    message: `Not \u201C${PROPERTY_LABELS[answer]}\u201D`,
-    detail: `It is ${PROPERTY_LABELS[truth].toLowerCase()}. ${witness(question.formula, truth)}`,
+    correct: true,
+    message: PROPERTY_LABELS[truth],
+    detail: witness(question.formula, truth),
   }
 }
 
@@ -368,41 +400,94 @@ function check(question: PropertyQuestion, answer: PropertyAnswer): Verdict {
 // ---------------------------------------------------------------------------
 
 function Screen({ question, submit, locked, solution }: MinigameScreenProps<PropertyQuestion, PropertyAnswer>) {
-  const printed = format(question.formula)
-  const formulaSize = printed.length > 44 ? 'text-lg' : printed.length > 28 ? 'text-xl' : 'text-2xl'
+  const [banked, setBanked] = useState<Banked>({})
+
+  useEffect(() => {
+    setBanked({})
+  }, [question])
+
+  const settled = banked.model !== undefined && banked.counter !== undefined
+  const shown: PropertyAnswer | null = locked
+    ? { model: banked.model ?? null, counter: banked.counter ?? null }
+    : null
 
   return (
     <Card>
       <p className="text-sm font-semibold uppercase tracking-widest text-ink-soft">
-        Which property fits?
+        Hunt the witnesses
       </p>
-      <p className={`mt-1 leading-snug font-semibold text-balance text-ink ${formulaSize}`}>
-        <FormulaText formula={question.formula} />
+      <p className="mt-1 mb-2 text-xs font-medium text-ink-soft">
+        Find a row making it true and a row making it false — or claim there is none. What the
+        formula <em>is</em> follows from which ones you find.
       </p>
 
-      <div className="mt-4 flex flex-col gap-2">
-        {CLASSIFICATIONS.map((option) => {
-          const isAnswer = locked && solution === option
-          return (
-            <Button
-              key={option}
-              variant={isAnswer ? 'primary' : 'secondary'}
-              disabled={locked}
-              onClick={() => submit(option)}
-              className={`w-full flex-col items-start gap-0 py-3 text-left
-                ${isAnswer ? 'revealed' : ''} ${locked && !isAnswer ? 'opacity-50' : ''}`}
-            >
-              <span className="block text-base font-bold">{PROPERTY_LABELS[option]}</span>
-              <span className="block text-sm font-medium opacity-80">{PROPERTY_HINTS[option]}</span>
-            </Button>
-          )
-        })}
-      </div>
+      <WitnessHunt
+        locked={locked}
+        formulas={[{ label: 'φ', formula: question.formula }]}
+        banked={banked}
+        onBank={(id, assignment) => setBanked((previous) => ({ ...previous, [id]: assignment }))}
+        goals={[
+          {
+            id: 'model',
+            label: 'A row making it true',
+            noneLabel: 'None — never true',
+            test: (assignment) => evaluate(question.formula, assignment),
+          },
+          {
+            id: 'counter',
+            label: 'A row making it false',
+            noneLabel: 'None — never false',
+            test: (assignment) => !evaluate(question.formula, assignment),
+          },
+        ]}
+        footer={
+          <>
+            {!locked && (
+              <Button
+                variant="coin"
+                className="mt-3 w-full"
+                disabled={!settled}
+                onClick={() =>
+                  submit({ model: banked.model ?? null, counter: banked.counter ?? null })
+                }
+              >
+                {settled
+                  ? `Submit — ${PROPERTY_LABELS[classifyFromWitnesses({
+                      model: banked.model ?? null,
+                      counter: banked.counter ?? null,
+                    })].toLowerCase()}`
+                  : 'Settle both rows first'}
+              </Button>
+            )}
+
+            {locked && shown !== null && (
+              <Pop className="mt-3 rounded-2xl bg-card-shade p-3">
+                <p className="text-xs font-bold uppercase tracking-wider text-ink-soft">
+                  What that makes it
+                </p>
+                <p className="mt-1 text-base font-bold">
+                  {PROPERTY_LABELS[classifyFromWitnesses(shown)]}
+                </p>
+                <p className="mt-1 text-xs font-medium text-ink-soft">
+                  A row of each means satisfiable and refutable at once. No false row means valid;
+                  no true row means unsatisfiable.
+                </p>
+                {solution !== null && (
+                  <p className="mt-2 text-xs font-medium text-ink-soft">
+                    Reference: {solution.model === null ? 'no model' : showAssignment(solution.model)} ·{' '}
+                    {solution.counter === null ? 'no counter-model' : showAssignment(solution.counter)}
+                  </p>
+                )}
+              </Pop>
+            )}
+          </>
+        }
+      />
 
       <p className="mt-3 text-xs font-medium text-ink-soft">
-        {question.variables.length} variables · {1 << question.variables.length} assignments to
-        account for. Every valid formula is satisfiable too, which is why the middle option says
-        “not valid”.
+        {question.variables.length} variables · {1 << question.variables.length} rows. Every valid
+        formula is satisfiable too — which is why "no false row" is the claim that makes it valid,
+        not "no true row".
       </p>
     </Card>
   )
@@ -416,16 +501,6 @@ export const propertyGame = defineMinigame<PropertyQuestion, PropertyAnswer>({
   icon: '🔎',
   roundSeconds: 120,
   sprintQuestions: 10,
-  /**
-   * Triple the usual penalty, because this is a three-way choice.
-   *
-   * Sprint will not let you move on until you are right, so with three options
-   * you can always brute-force a question in at most two wrong guesses. At the
-   * default five seconds that costs ten — less than honestly working out
-   * whether a formula with three variables is valid, which makes guessing the
-   * faster strategy. At twelve it is comfortably the slower one.
-   */
-  sprintPenaltySeconds: 12,
   generate,
   check,
   solve,

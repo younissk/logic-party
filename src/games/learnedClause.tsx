@@ -23,13 +23,12 @@ import {
   learnFromDecisions,
   normaliseClause,
   showClause,
-  type CdclStep,
 } from '@/logic'
 import { defineMinigame } from '@/engine/registry'
 import type { Difficulty, GenerateContext, MinigameScreenProps, Verdict } from '@/engine/types'
 import { Button, Card } from '@/ui/primitives'
-import { ClauseList } from '@/ui/ClauseSet'
 import { ClauseText } from '@/ui/ClauseText'
+import { Pop } from '@/ui/motion'
 import { LearnedClauseGuide } from './learnedClause.guide'
 
 export interface LearnedQuestion {
@@ -37,11 +36,10 @@ export interface LearnedQuestion {
   /** The conflict being analysed. */
   decisions: Literal[]
   propagated: Literal[]
-  options: Clause[]
-  answer: number
 }
 
-export type LearnedAnswer = number
+/** The clause built, literal by literal. */
+export type LearnedAnswer = Clause
 
 interface Profile {
   variables: string[]
@@ -56,22 +54,6 @@ const PROFILES: Record<Difficulty, Profile> = {
 }
 
 const ATTEMPTS = 400
-
-/** Wrong answers that are each a specific misunderstanding. */
-function distractors(step: CdclStep): Clause[] {
-  const negate = (literal: Literal): Literal => ({ name: literal.name, negated: !literal.negated })
-  return [
-    // The decisions un-negated — forgetting that you record the *forbidden*
-    // combination, not the combination itself.
-    normaliseClause(step.decisions),
-    // The propagated literals thrown in as well, giving a weaker clause.
-    normaliseClause([...step.decisions, ...step.propagated].map(negate)),
-    // Only the last decision, as if plain DPLL backtracking.
-    normaliseClause(step.decisions.slice(-1).map(negate)),
-    // Everything assigned, un-negated.
-    normaliseClause([...step.decisions, ...step.propagated]),
-  ]
-}
 
 function generate({ rng, difficulty }: GenerateContext): LearnedQuestion {
   const profile = PROFILES[difficulty]
@@ -100,25 +82,7 @@ function generate({ rng, difficulty }: GenerateContext): LearnedQuestion {
     if (usable.length === 0) continue
 
     const step = rng.pick(usable)
-    const truth = step.learned
-
-    const wrong: Clause[] = []
-    for (const option of distractors(step)) {
-      if (clauseKey(option) === clauseKey(truth)) continue
-      if (option.length === 0) continue
-      if (wrong.some((existing) => clauseKey(existing) === clauseKey(option))) continue
-      wrong.push(option)
-    }
-    if (wrong.length < 2) continue
-
-    const options = rng.shuffle([truth, ...wrong.slice(0, 3)])
-    return {
-      clauses,
-      decisions: step.decisions,
-      propagated: step.propagated,
-      options,
-      answer: options.findIndex((option) => clauseKey(option) === clauseKey(truth)),
-    }
+    return { clauses, decisions: step.decisions, propagated: step.propagated }
   }
 
   // Last resort, so a round can never stall: the notes' own first conflict.
@@ -138,20 +102,18 @@ function generate({ rng, difficulty }: GenerateContext): LearnedQuestion {
     clauses: named.map((clause) => clause.map(([name, negated]) => ({ name, negated }))),
     decisions,
     propagated: [{ name: 'c', negated: true }],
-    options: [learnFromDecisions(decisions).clause],
-    answer: 0,
   }
 }
 
-const solve = (question: LearnedQuestion): LearnedAnswer => question.answer
+const solve = (question: LearnedQuestion): LearnedAnswer => learnFromDecisions(question.decisions).clause
 
 function check(question: LearnedQuestion, answer: LearnedAnswer): Verdict {
-  const truth = question.options[question.answer] as Clause
+  const truth = learnFromDecisions(question.decisions).clause
   const decisions = question.decisions
     .map((literal) => `${literal.name} = ${literal.negated ? 'F' : 'T'}`)
     .join(' and ')
 
-  if (answer === question.answer) {
+  if (clauseKey(normaliseClause(answer)) === clauseKey(truth)) {
     return {
       correct: true,
       message: showClause(truth),
@@ -159,78 +121,140 @@ function check(question: LearnedQuestion, answer: LearnedAnswer): Verdict {
     }
   }
 
+  // Name the specific misunderstanding rather than the answer: sprint shows
+  // this before the retry.
+  const propagated = new Set(question.propagated.map((literal) => literal.name))
+  const included = answer.some((literal) => propagated.has(literal.name))
+  const unnegated = answer.some((literal) =>
+    question.decisions.some(
+      (decision) => decision.name === literal.name && decision.negated === literal.negated,
+    ),
+  )
+
   return {
     correct: false,
-    message: 'Not the clause that gets learned',
-    detail: `${showClause(truth)}. Negate the decisions and only the decisions: ${decisions} was impossible, so at least one of them has to go the other way. Anything BCP derived follows from the decisions already, so including it only makes the clause weaker.`,
+    message: included
+      ? 'That includes something BCP derived'
+      : unnegated
+        ? 'That is the combination you tried, not the one to forbid'
+        : 'Not the clause that gets learned',
+    detail: included
+      ? `Anything propagation derived already follows from the decisions, so putting it in only makes the clause longer — and a longer clause fires later. Decisions only.`
+      : `Negate the decisions and only the decisions: ${decisions} was impossible, so at least one of them has to go the other way.`,
   }
 }
 
 function Screen({ question, submit, locked, solution }: MinigameScreenProps<LearnedQuestion, LearnedAnswer>) {
-  const [, setPicked] = useState<number | null>(null)
+  const [built, setBuilt] = useState<Clause>([])
 
   useEffect(() => {
-    setPicked(null)
+    setBuilt([])
   }, [question])
+
+  const negate = (literal: Literal): Literal => ({ name: literal.name, negated: !literal.negated })
+  const key = (literal: Literal) => `${literal.negated ? '¬' : ''}${literal.name}`
+
+  const toggle = (literal: Literal) => {
+    if (locked) return
+    // Tapping an assignment adds its *negation*: the clause forbids what was
+    // tried, and doing that conversion by hand is where the marks go.
+    const flipped = negate(literal)
+    setBuilt((previous) =>
+      previous.some((entry) => key(entry) === key(flipped))
+        ? previous.filter((entry) => key(entry) !== key(flipped))
+        : normaliseClause([...previous, flipped]),
+    )
+  }
+
+  const inClause = (literal: Literal) => built.some((entry) => key(entry) === key(negate(literal)))
+  const shown = locked ? (solution ?? built) : built
 
   return (
     <Card>
       <p className="text-sm font-semibold uppercase tracking-widest text-ink-soft">
-        What gets learned?
+        Build the learned clause
       </p>
 
-      <ClauseList set={question.clauses} className="mt-2" />
-
-      <div className="mt-3 flex flex-col gap-1.5 rounded-2xl bg-card-shade p-3 text-sm">
-        <p className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs font-bold uppercase tracking-wider text-ink-soft">Decisions</span>
-          {question.decisions.map((literal) => (
-            <span
-              key={literal.name}
-              className="space inline-flex h-6 items-center bg-coin px-2 text-xs font-bold"
-            >
-              {literal.name} = {literal.negated ? 'F' : 'T'}
-            </span>
-          ))}
-        </p>
-        <p className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs font-bold uppercase tracking-wider text-ink-soft">BCP then forced</span>
-          {question.propagated.map((literal) => (
-            <span
-              key={literal.name}
-              className="formula rounded-md border-2 border-ink bg-white px-1.5 text-xs font-bold"
-            >
-              {literal.name} = {literal.negated ? 'F' : 'T'}
-            </span>
-          ))}
-          <span className="text-xs font-bold text-space-red">→ conflict</span>
-        </p>
-      </div>
-
-      <div className="mt-3 flex flex-col gap-2">
-        {question.options.map((clause, index) => {
-          const isAnswer = locked && solution === index
-          return (
-            <Button
-              key={index}
-              variant={isAnswer ? 'primary' : 'secondary'}
-              disabled={locked}
-              onClick={() => {
-                setPicked(index)
-                submit(index)
-              }}
-              className={`w-full justify-start py-2.5 text-left
-                ${isAnswer ? 'revealed' : ''} ${locked && !isAnswer ? 'opacity-50' : ''}`}
-            >
-              <ClauseText clause={clause} className="text-base font-bold" />
-            </Button>
-          )
-        })}
+      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1 rounded-xl bg-card-shade px-3 py-2">
+        {question.clauses.map((clause, index) => (
+          <ClauseText key={index} clause={clause} className="text-sm font-bold" />
+        ))}
       </div>
 
       <p className="mt-3 text-xs font-medium text-ink-soft">
-        Circles are decisions, boxes are propagations. Only the decisions go into the learned clause.
+        Tap an assignment to forbid it. What goes into the clause is its negation — and only the
+        decisions belong there.
       </p>
+
+      <div className="mt-2 flex flex-col gap-2">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-ink-soft">Decisions</p>
+          <div className="mt-1 flex flex-wrap gap-2">
+            {question.decisions.map((literal) => (
+              <button
+                key={literal.name}
+                type="button"
+                disabled={locked}
+                onClick={() => toggle(literal)}
+                className={`space formula flex h-11 items-center px-3 text-sm font-bold
+                  ${inClause(literal) ? 'bg-space-blue text-white' : 'bg-coin text-ink'}`}
+              >
+                {literal.name} = {literal.negated ? 'F' : 'T'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-ink-soft">
+            BCP then forced — not decisions
+          </p>
+          <div className="mt-1 flex flex-wrap items-center gap-2">
+            {question.propagated.map((literal) => (
+              <button
+                key={literal.name}
+                type="button"
+                disabled={locked}
+                onClick={() => toggle(literal)}
+                className={`formula flex h-11 items-center rounded-md border-2 border-ink px-3 text-sm font-bold
+                  ${inClause(literal) ? 'bg-space-red text-white' : 'bg-white text-ink'}`}
+              >
+                {literal.name} = {literal.negated ? 'F' : 'T'}
+              </button>
+            ))}
+            <span className="text-xs font-bold text-space-red">→ conflict</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="tile mt-3 flex min-h-14 flex-wrap items-center gap-1.5 bg-card-shade p-3">
+        <span className="formula text-lg font-bold">(</span>
+        {shown.length === 0 && (
+          <span className="text-sm font-semibold text-ink-soft">nothing forbidden yet</span>
+        )}
+        {shown.map((literal, index) => (
+          <span key={key(literal)} className="flex items-center gap-1.5">
+            {index > 0 && <span className="formula font-bold">∨</span>}
+            <Pop>
+              <span className="chunky formula flex h-9 items-center bg-space-blue px-2.5 text-sm font-bold text-white">
+                {key(literal)}
+              </span>
+            </Pop>
+          </span>
+        ))}
+        <span className="formula text-lg font-bold">)</span>
+      </div>
+
+      {!locked && (
+        <Button
+          variant="coin"
+          className="mt-3 w-full"
+          disabled={built.length === 0}
+          onClick={() => submit(built)}
+        >
+          {built.length === 0 ? 'Forbid something' : `Learn ${showClause(built)}`}
+        </Button>
+      )}
     </Card>
   )
 }
@@ -243,12 +267,13 @@ export const learnedClauseGame = defineMinigame<LearnedQuestion, LearnedAnswer>(
   icon: '🧠',
   roundSeconds: 150,
   sprintQuestions: 6,
-  sprintPenaltySeconds: 10,
   generate,
   check,
   solve,
   Screen,
   Guide: LearnedClauseGuide,
   questionKey: (question) =>
-    `${question.clauses.map(clauseKey).join(';')}|${question.decisions.map((l) => `${l.negated ? '¬' : ''}${l.name}`).join(',')}`,
+    `${question.clauses.map(clauseKey).join(';')}|${question.decisions
+      .map((l) => `${l.negated ? '¬' : ''}${l.name}`)
+      .join(',')}`,
 })

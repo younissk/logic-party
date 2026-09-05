@@ -13,11 +13,17 @@
  * marks: distribute before the negations are in and you end up with ¬(a ∧ b)
  * sitting inside something you are calling a clause.
  *
- * So the game asks the one thing that matters — *which move is next* — on a
- * formula caught at a random point mid-pipeline. Never improvise; scan the
+ * So you drive it. Tap a rule and it applies to the whole formula in front of
+ * you, all the way from the starting formula down to CNF. A rule that does not
+ * apply does nothing and says so, which is exactly what happens on paper when
+ * you try to distribute before the negations are in.
+ *
+ * What is graded is the route: reaching CNF with no wasted taps. Scan the
  * ladder top to bottom and take the first rung that fires.
  */
 
+import { useEffect, useMemo, useState } from 'react'
+import { motion } from 'motion/react'
 import type { Formula } from '@/logic'
 import {
   CNF_STEPS,
@@ -37,14 +43,18 @@ import { defineMinigame } from '@/engine/registry'
 import type { Difficulty, GenerateContext, MinigameScreenProps, Verdict } from '@/engine/types'
 import { Button, Card } from '@/ui/primitives'
 import { FormulaText } from '@/ui/FormulaText'
+import { Pop, ProgressBar, SNAP, Shakeable, useShake } from '@/ui/motion'
 import { CnfPipelineGuide } from './cnfPipeline.guide'
 
 export interface CnfPipelineQuestion {
   /** A formula caught somewhere along the pipeline, possibly at the start. */
   formula: Formula
+  /** Moves the shortest route takes — the par to match. */
+  par: number
 }
 
-export type CnfPipelineAnswer = CnfStep
+/** Every rule tapped, in order, including the ones that did nothing. */
+export type CnfPipelineAnswer = CnfStep[]
 
 // ---------------------------------------------------------------------------
 // Generation
@@ -77,10 +87,11 @@ function stages(formula: Formula): Formula[] {
 
 function generate({ rng, difficulty }: GenerateContext): CnfPipelineQuestion {
   const profile = PROFILES[difficulty]
-  // Draw the answer first, then look for a formula that has it. Sampling
-  // formulas and taking whatever step falls out would bury 'clean' and 'done',
-  // which only ever appear at the very end of a run.
-  const target = rng.pick(CNF_STEPS)
+  // Draw the first move, then look for a formula that needs it. Sampling
+  // formulas and taking whatever fell out would bury 'clean', which only ever
+  // appears at the very end of a run. 'done' is not a starting point: a
+  // formula already in CNF has nothing to drive.
+  const target = rng.pick(CNF_STEPS.filter((step) => step !== 'done'))
 
   for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
     const source = randomFormula(rng, {
@@ -102,13 +113,15 @@ function generate({ rng, difficulty }: GenerateContext): CnfPipelineQuestion {
     }
 
     if (candidates.length === 0) continue
-    return { formula: rng.pick(candidates) }
+    const formula = rng.pick(candidates)
+    const par = cnfPipeline(formula).length
+    if (par === 0) continue
+    return { formula, par }
   }
 
   // Last resort, so a round can never stall: the worked example from the
   // notes, which starts at step 1.
-  return {
-    formula: {
+  const fallback: Formula = {
       kind: 'or',
       left: {
         kind: 'not',
@@ -118,16 +131,17 @@ function generate({ rng, difficulty }: GenerateContext): CnfPipelineQuestion {
           right: { kind: 'var', name: 'c' },
         },
       },
-      right: { kind: 'and', left: { kind: 'var', name: 'a' }, right: { kind: 'var', name: 'c' } },
-    },
+    right: { kind: 'and', left: { kind: 'var', name: 'a' }, right: { kind: 'var', name: 'c' } },
   }
+  return { formula: fallback, par: cnfPipeline(fallback).length }
 }
 
 // ---------------------------------------------------------------------------
 // Marking
 // ---------------------------------------------------------------------------
 
-const solve = (question: CnfPipelineQuestion): CnfPipelineAnswer => nextCnfStep(question.formula)
+const solve = (question: CnfPipelineQuestion): CnfPipelineAnswer =>
+  cnfPipeline(question.formula).map((entry) => entry.step)
 
 /** What the correct move does to this formula, in the terms that matter. */
 export function outcome(formula: Formula): string {
@@ -148,33 +162,55 @@ export function outcome(formula: Formula): string {
     const before = clauses(formula).length
     return `Becomes ${format(after)} — ${before} clauses down to ${isCNF(after) ? clauses(after).length : 0}.`
   }
-  return `Becomes ${format(after)}${grew > 0 ? ` — ${grew} nodes bigger` : ''}. Next: ${CNF_STEP_LABELS[nextCnfStep(after)].toLowerCase()}.`
+  return `Becomes ${format(after)}${grew > 0 ? ` — ${grew} nodes bigger` : ''}.`
+}
+
+/** Replay a route, reporting where it got to and how many taps did nothing. */
+export function drive(
+  formula: Formula,
+  moves: readonly CnfStep[],
+): { result: Formula; wasted: number } {
+  let current = formula
+  let wasted = 0
+  for (const move of moves) {
+    if (move === 'done') continue
+    if (move !== nextCnfStep(current)) {
+      // Out of order is a no-op, exactly as it is on paper: distributing
+      // before the negations are in leaves ¬(a ∧ b) inside a clause.
+      wasted++
+      continue
+    }
+    current = applyCnfStep(current, move)
+  }
+  return { result: current, wasted }
 }
 
 function check(question: CnfPipelineQuestion, answer: CnfPipelineAnswer): Verdict {
-  const truth = solve(question)
+  const { result, wasted } = drive(question.formula, answer)
 
-  if (answer === truth) {
-    return { correct: true, message: CNF_STEP_LABELS[truth], detail: outcome(question.formula) }
+  if (nextCnfStep(result) !== 'done') {
+    return {
+      correct: false,
+      // Never names the move that was due: sprint shows this before the retry.
+      message: 'Not CNF yet',
+      detail: `${format(result)} is where you stopped. Keep going: the ladder ends when every conjunct is a disjunction of literals and nothing is left to drop.`,
+      score: Math.max(0, (question.par - cnfPipeline(result).length) / question.par),
+    }
   }
 
-  // Say what is wrong with the move that was picked, never which move is
-  // right: in sprint this message is the only feedback before the retry.
-  const reasons: Record<CnfStep, string> = {
-    iff: 'there is no ↔ left to eliminate',
-    implies: 'either a ↔ still has to go first, or there is no → left',
-    nnf: 'either ↔ or → still has to go first, or every ¬ already sits on a variable',
-    distribute: 'something earlier in the ladder still applies, or it is already CNF',
-    clean: 'it is not in CNF yet, or there is nothing left to drop',
-    done: 'this is not CNF yet',
+  if (wasted > 0) {
+    return {
+      correct: false,
+      message: `${wasted} tap${wasted === 1 ? '' : 's'} did nothing`,
+      detail: `You got there, but the order is the algorithm: a rule applied out of turn changes nothing at all. Par is ${question.par} moves.`,
+      score: question.par / (question.par + wasted),
+    }
   }
 
   return {
-    correct: false,
-    message: `Not “${CNF_STEP_LABELS[answer]}”`,
-    detail: `${CNF_STEP_LABELS[answer]} does not apply here — ${reasons[answer]}. The move is ${
-      CNF_STEP_LABELS[truth]
-    }: ${outcome(question.formula)}`,
+    correct: true,
+    message: `CNF in ${question.par}`,
+    detail: `${clauses(result).length} clause${clauses(result).length === 1 ? '' : 's'}. Straight down the ladder, nothing wasted.`,
   }
 }
 
@@ -182,61 +218,112 @@ function check(question: CnfPipelineQuestion, answer: CnfPipelineAnswer): Verdic
 // Screen
 // ---------------------------------------------------------------------------
 
-/** Which rung of the ladder each move sits on, shown as a running number. */
-const STEP_ORDER: Readonly<Record<CnfStep, string>> = {
-  iff: '1',
-  implies: '2',
-  nnf: '3',
-  distribute: '4',
-  clean: '5',
-  done: '✓',
-}
+function Screen({ question, submit, locked }: MinigameScreenProps<CnfPipelineQuestion, CnfPipelineAnswer>) {
+  const [moves, setMoves] = useState<CnfStep[]>([])
+  const [refused, setRefused] = useState<CnfStep | null>(null)
+  const [shaking, shake] = useShake()
 
-function Screen({ question, submit, locked, solution }: MinigameScreenProps<CnfPipelineQuestion, CnfPipelineAnswer>) {
-  const printed = format(question.formula)
-  const formulaSize = printed.length > 52 ? 'text-base' : printed.length > 34 ? 'text-lg' : 'text-xl'
+  useEffect(() => {
+    setMoves([])
+    setRefused(null)
+  }, [question])
+
+  const { result, wasted } = useMemo(() => drive(question.formula, moves), [question, moves])
+  const done = nextCnfStep(result) === 'done'
+
+  const tap = (step: CnfStep) => {
+    if (locked || done) return
+    setMoves((previous) => [...previous, step])
+    if (step !== nextCnfStep(result)) {
+      setRefused(step)
+      shake()
+      return
+    }
+    setRefused(null)
+  }
+
+  const printed = format(result)
+  const scale = printed.length > 64 ? 'text-sm' : printed.length > 40 ? 'text-base' : 'text-lg'
 
   return (
     <Card>
-      <p className="text-sm font-semibold uppercase tracking-widest text-ink-soft">
-        What is the next move?
-      </p>
-      <p className={`mt-1 leading-snug font-semibold text-balance text-ink ${formulaSize}`}>
-        <FormulaText formula={question.formula} />
-      </p>
-
-      <div className="mt-4 flex flex-col gap-2">
-        {CNF_STEPS.map((step) => {
-          const isAnswer = locked && solution === step
-          return (
-            <Button
-              key={step}
-              variant={isAnswer ? 'primary' : 'secondary'}
-              disabled={locked}
-              onClick={() => submit(step)}
-              className={`w-full items-start gap-3 py-2.5 text-left
-                ${isAnswer ? 'revealed' : ''} ${locked && !isAnswer ? 'opacity-50' : ''}`}
-            >
-              <span
-                className={`mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold
-                  ${isAnswer ? 'bg-white/25 text-white' : 'bg-card-shade text-ink-soft'}`}
-              >
-                {STEP_ORDER[step]}
-              </span>
-              <span className="min-w-0 flex-1">
-                <span className="block text-[0.95rem] font-bold">{CNF_STEP_LABELS[step]}</span>
-                <span className="formula block text-xs font-medium opacity-80">
-                  {CNF_STEP_RULES[step]}
-                </span>
-              </span>
-            </Button>
-          )
-        })}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+        <p className="text-sm font-semibold uppercase tracking-widest text-ink-soft">
+          Drive it to CNF
+        </p>
+        <p className="text-xs font-bold text-ink-soft">
+          {moves.length - wasted} of {question.par}
+          {wasted > 0 && ` · ${wasted} wasted`}
+        </p>
       </div>
 
+      <Shakeable shaking={shaking}>
+        <motion.p
+          key={printed}
+          initial={{ opacity: 0.4, y: -4 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={SNAP}
+          className={`tile mt-2 bg-card-shade px-3 py-3 leading-snug font-semibold text-balance ${scale}`}
+        >
+          <FormulaText formula={result} />
+        </motion.p>
+      </Shakeable>
+
+      <p className="mt-1 flex flex-wrap items-baseline justify-between gap-x-2 text-xs font-semibold text-ink-soft">
+        <span>{size(result)} nodes</span>
+        {isCNF(result) && <span>{clauses(result).length} clauses</span>}
+      </p>
+
+      <div className="mt-2">
+        <ProgressBar value={moves.length - wasted} total={question.par} />
+      </div>
+
+      {refused !== null && !locked && (
+        <Pop className="tile mt-2 bg-coin px-3 py-2">
+          <p className="text-sm font-bold">{CNF_STEP_LABELS[refused]} does nothing here</p>
+          <p className="mt-0.5 text-xs font-medium">
+            A rule applied out of turn changes nothing at all — which is why the order is the
+            algorithm and not a preference.
+          </p>
+        </Pop>
+      )}
+
+      <div className="mt-3 flex flex-col gap-2">
+        {CNF_STEPS.filter((step) => step !== 'done').map((step, index) => (
+          <Button
+            key={step}
+            variant="secondary"
+            disabled={locked || done}
+            onClick={() => tap(step)}
+            className="w-full items-start gap-3 py-2.5 text-left"
+          >
+            <span className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-card-shade text-xs font-bold text-ink-soft">
+              {index + 1}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[0.95rem] font-bold">{CNF_STEP_LABELS[step]}</span>
+              <span className="formula block text-xs font-medium opacity-80">
+                {CNF_STEP_RULES[step]}
+              </span>
+            </span>
+          </Button>
+        ))}
+      </div>
+
+      {!locked && (
+        <Button
+          variant={done ? 'coin' : 'secondary'}
+          className="mt-3 w-full"
+          disabled={!done}
+          onClick={() => submit(moves)}
+        >
+          {done ? 'Done — this is CNF' : 'Keep going'}
+        </Button>
+      )}
+
       <p className="mt-3 text-xs font-medium text-ink-soft">
-        Scan top to bottom and take the first rung that applies. The order is the algorithm — doing
-        4 before 3 leaves a negated conjunction inside a clause.
+        Scan top to bottom and take the first rung that applies. Doing 4 before 3 leaves a negated
+        conjunction inside a clause.
       </p>
     </Card>
   )
@@ -252,7 +339,6 @@ export const cnfPipelineGame = defineMinigame<CnfPipelineQuestion, CnfPipelineAn
   sprintQuestions: 10,
   // Six options, and sprint will not move on until you are right, so the
   // default five seconds would make guessing cheaper than reading the formula.
-  sprintPenaltySeconds: 10,
   generate,
   check,
   solve,

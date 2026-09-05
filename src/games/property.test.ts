@@ -2,6 +2,9 @@ import { describe, expect, it } from 'vitest'
 
 import {
   classify,
+  evaluate,
+  findCounterexample,
+  findModel,
   format,
   isEquivalent,
   makeRng,
@@ -9,7 +12,6 @@ import {
   randomFormula,
   size,
   sortedVariables,
-  type Classification,
   type Formula,
 } from '@/logic'
 import { DIFFICULTIES, type Difficulty } from '@/engine/types'
@@ -17,7 +19,9 @@ import {
   CLASSIFICATIONS,
   CONTRADICTION_SCHEMAS,
   PROFILES,
+  PROPERTY_LABELS,
   TAUTOLOGY_SCHEMAS,
+  classifyFromWitnesses,
   commute,
   fullClauseSet,
   propertyGame,
@@ -155,73 +159,111 @@ describe('generate', () => {
 })
 
 describe('check', () => {
-  it.each(DIFFICULTIES)('marks the reference answer correct on %s', (difficulty) => {
+  it.each(DIFFICULTIES)('marks the reference witnesses correct on %s', (difficulty) => {
     for (const question of sample(difficulty, 150)) {
       const verdict = propertyGame.check(question, propertyGame.solve(question))
       expect(verdict.correct, format(question.formula)).toBe(true)
     }
   })
 
-  it.each(DIFFICULTIES)('marks every other answer wrong on %s', (difficulty) => {
-    for (const question of sample(difficulty, 60)) {
-      const truth = propertyGame.solve(question)
-      for (const option of CLASSIFICATIONS.filter((c) => c !== truth)) {
-        expect(propertyGame.check(question, option).correct, format(question.formula)).toBe(false)
-      }
+  it.each(DIFFICULTIES)('the reference witnesses really are witnesses on %s', (difficulty) => {
+    // Independent of `check`: a banked model has to make the formula true and
+    // a banked counter-model false, and a null has to mean none exists.
+    for (const question of sample(difficulty, 150)) {
+      const answer = propertyGame.solve(question)
+      if (answer.model === null) expect(findModel(question.formula)).toBeNull()
+      else expect(evaluate(question.formula, answer.model), format(question.formula)).toBe(true)
+
+      if (answer.counter === null) expect(findCounterexample(question.formula)).toBeNull()
+      else expect(evaluate(question.formula, answer.counter), format(question.formula)).toBe(false)
     }
   })
 
-  /**
-   * Sprint shows `message` before you retry but hides `detail`, so a message
-   * that named the right answer would hand the question over — and with three
-   * options that is the whole question.
-   */
+  it.each(DIFFICULTIES)('the witnesses determine the classification on %s', (difficulty) => {
+    for (const question of sample(difficulty, 150)) {
+      expect(classifyFromWitnesses(propertyGame.solve(question))).toBe(classify(question.formula))
+    }
+  })
+
+  it.each(DIFFICULTIES)('rejects a row that does not do what it claims on %s', (difficulty) => {
+    for (const question of sample(difficulty, 100)) {
+      const answer = propertyGame.solve(question)
+      // Swap the two slots: a model banked as a counter-model is exactly the
+      // mistake of not checking which way round you were looking.
+      const swapped = { model: answer.counter, counter: answer.model }
+      if (
+        (swapped.model === null) === (answer.model === null) &&
+        (swapped.counter === null) === (answer.counter === null) &&
+        classify(question.formula) !== 'contingent'
+      ) {
+        continue
+      }
+      expect(propertyGame.check(question, swapped).correct, format(question.formula)).toBe(false)
+    }
+  })
+
+  it('rejects claiming no model when there is one', () => {
+    for (const question of sample('medium', 100)) {
+      if (findModel(question.formula) === null) continue
+      const answer = propertyGame.solve(question)
+      expect(propertyGame.check(question, { ...answer, model: null }).correct).toBe(false)
+    }
+  })
+
+  it('rejects claiming no counter-model when there is one', () => {
+    for (const question of sample('medium', 100)) {
+      if (findCounterexample(question.formula) === null) continue
+      const answer = propertyGame.solve(question)
+      expect(propertyGame.check(question, { ...answer, counter: null }).correct).toBe(false)
+    }
+  })
+
+  it('gives half credit for getting one slot right', () => {
+    for (const question of sample('medium', 60)) {
+      const answer = propertyGame.solve(question)
+      if (answer.model === null || answer.counter === null) continue
+      const half = propertyGame.check(question, { model: answer.counter, counter: answer.counter })
+      expect(half.correct).toBe(false)
+      expect(half.score).toBe(0.5)
+    }
+  })
+
   it('never reveals the answer in the retry message', () => {
-    // The invariant is stronger than "does not name the answer": the message
-    // for a wrong pick must depend on the pick alone. If it is the same string
-    // whatever the formula turned out to be, it carries no information about
-    // the formula, and there is nothing to read off it.
-    const seen = new Map<Classification, Set<string>>()
+    // Sprint shows `message` before the retry and hides `detail`, so a *wrong*
+    // answer's message must not name what the formula is. A correct one names
+    // it on purpose — that is the reward, not a leak.
+    const messages = new Set<string>()
     for (const difficulty of DIFFICULTIES) {
-      for (const question of sample(difficulty, 100)) {
-        const truth = propertyGame.solve(question)
-        for (const option of CLASSIFICATIONS.filter((c) => c !== truth)) {
-          const messages = seen.get(option) ?? new Set<string>()
-          messages.add(propertyGame.check(question, option).message)
-          seen.set(option, messages)
+      for (const question of sample(difficulty, 60)) {
+        const answer = propertyGame.solve(question)
+        for (const attempt of [
+          { model: null, counter: null },
+          { ...answer, model: null },
+          { ...answer, counter: null },
+          { model: answer.counter, counter: answer.model },
+        ]) {
+          const verdict = propertyGame.check(question, attempt)
+          if (verdict.correct) continue
+          messages.add(verdict.message)
         }
       }
     }
 
-    expect([...seen.keys()].sort()).toEqual([...CLASSIFICATIONS].sort())
-    for (const [option, messages] of seen) {
-      expect([...messages], `messages for ${option}`).toHaveLength(1)
-    }
-  })
-
-  it('explains a wrong answer with the witness Definition 2.6 asks for', () => {
-    const cases: [string, Classification, RegExp][] = [
-      ['p ∨ ¬p', 'tautology', /no assignment makes it false/i],
-      ['p ∧ ¬p', 'contradiction', /no assignment makes it true/i],
-      ['p → q', 'contingent', /model:.*counter-model:/is],
-    ]
-    for (const [source, truth, pattern] of cases) {
-      const formula = parse(source)
-      const question: PropertyQuestion = { formula, variables: sortedVariables(formula) }
-      expect(propertyGame.solve(question)).toBe(truth)
-      const wrong = CLASSIFICATIONS.find((c) => c !== truth) as Classification
-      expect(propertyGame.check(question, wrong).detail ?? '').toMatch(pattern)
+    expect(messages.size).toBeGreaterThan(0)
+    for (const message of messages) {
+      for (const label of Object.values(PROPERTY_LABELS)) {
+        expect(message.toLowerCase(), message).not.toContain(label.toLowerCase())
+      }
     }
   })
 })
 
 describe('sprint penalty', () => {
-  /**
-   * Sprint blocks until you are right, so three options are always at most two
-   * wrong guesses from the truth. The penalty has to make that cost more than
-   * thinking, which the shared default does not.
-   */
-  it('is raised above the default for a three-way choice', () => {
-    expect(propertyGame.sprintPenaltySeconds).toBeGreaterThan(5)
+  it('is back to the shared default now that there is nothing to guess', () => {
+    // It used to be raised: with three buttons, sprint's block-until-right
+    // meant you were never more than two guesses from the truth. Hunting a
+    // witness has 2ⁿ rows and no shortlist, so guessing is no longer the
+    // cheaper strategy and the override has no reason left.
+    expect(propertyGame.sprintPenaltySeconds).toBeUndefined()
   })
 })

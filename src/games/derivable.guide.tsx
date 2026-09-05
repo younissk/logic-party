@@ -125,16 +125,26 @@ export function DerivableGuide() {
           <Prose>
             <ul className="flex list-disc flex-col gap-2 pl-5">
               <li>
-                Tick every candidate resolution can reach. <Sym>□</Sym> is always on the list, so
-                start by deciding whether the set is satisfiable.
+                You do not tick the reachable candidates, you <strong>build</strong> them. Tap two
+                clauses to resolve them; whatever comes out joins the bench and can be resolved
+                again. A candidate ticks itself the moment it appears.
               </li>
               <li>
-                When the clause set splits, the components are shown separately and labelled. Use
-                it: a candidate spanning both is free to reject.
+                A tautological resolvent is refused, not accepted-and-ignored — that is the dead end
+                the warning above describes, and you meet it as a wall rather than as a footnote.
               </li>
               <li>
-                Never all and never none — every question has at least one of each, so “tick
-                everything” always loses.
+                <Sym>□</Sym> is always on the list, so decide satisfiability first: if the set is
+                satisfiable, do not spend the clock hunting a refutation that does not exist.
+              </li>
+              <li>
+                When the clause set splits, the components are drawn separately and labelled. A
+                candidate spanning both is free to reject — and the board will not resolve across
+                the gap however hard you try.
+              </li>
+              <li>
+                Never all and never none — every question has at least one of each, so the bench
+                always has something left unreachable.
               </li>
               <li>
                 After you answer, each candidate gets its reason: refutation completeness, a

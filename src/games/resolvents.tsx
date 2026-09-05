@@ -1,11 +1,16 @@
 /**
  * Compute all resolvents — ln.pdf §2.3 Definition 2.22, exam25a Q1.1b.
  *
- * The exam question says "also include tautological resolvents", and that
- * phrase is the whole test. Two clauses clashing on two variables give *two*
- * resolvents, each of them a tautology, because cancelling one pivot leaves
- * the other pair standing. Cancelling both at once is not a resolution step,
- * and it is the answer this game is built to catch.
+ * You produce them rather than recognise them. Tap two clauses, pick the pivot
+ * when there is more than one, and the resolvent deals itself into your tray.
+ * Find them all.
+ *
+ * Which makes "one pivot per step" something the board enforces rather than
+ * something you are asked about: two clauses clashing on two variables offer
+ * you two separate pivots, and cancelling both at once is not a move the game
+ * has. The tautological results are still resolvents and still have to be
+ * found, which is what the exam question means by "also include tautological
+ * resolvents".
  */
 
 import { useEffect, useState } from 'react'
@@ -16,7 +21,6 @@ import {
   isTautologicalClause,
   normaliseClause,
   resolveOn,
-  sharedVariables,
   showClause,
   type Rng,
 } from '@/logic'
@@ -24,19 +28,18 @@ import { defineMinigame } from '@/engine/registry'
 import type { Difficulty, GenerateContext, MinigameScreenProps, Verdict } from '@/engine/types'
 import { Button, Card } from '@/ui/primitives'
 import { ClauseText } from '@/ui/ClauseText'
+import { MovingItem, MovingList, Pop, ProgressBar, Shakeable, useShake } from '@/ui/motion'
 import { ResolventsGuide } from './resolvents.guide'
 
 export interface ResolventsQuestion {
   /** The clauses on the table. */
   clauses: Clause[]
-  /** Candidates to judge — a mix of real resolvents and near misses. */
-  candidates: Clause[]
-  /** Indices into `candidates` that really are one-step resolvents. */
-  correct: number[]
+  /** Every distinct one-step resolvent, tautologies included. */
+  resolvents: Clause[]
 }
 
-/** Indices the player ticked. */
-export type ResolventsAnswer = number[]
+/** The resolvents produced, as clauses. */
+export type ResolventsAnswer = Clause[]
 
 // ---------------------------------------------------------------------------
 // Generation
@@ -46,13 +49,12 @@ interface Profile {
   variables: string[]
   clauses: number
   width: [min: number, max: number]
-  distractors: number
 }
 
 const PROFILES: Record<Difficulty, Profile> = {
-  easy: { variables: ['a', 'b', 'c'], clauses: 2, width: [2, 3], distractors: 3 },
-  medium: { variables: ['a', 'b', 'c', 'd'], clauses: 3, width: [2, 3], distractors: 4 },
-  hard: { variables: ['a', 'b', 'c', 'd', 'e'], clauses: 3, width: [3, 4], distractors: 5 },
+  easy: { variables: ['a', 'b', 'c'], clauses: 2, width: [2, 3] },
+  medium: { variables: ['a', 'b', 'c', 'd'], clauses: 3, width: [2, 3] },
+  hard: { variables: ['a', 'b', 'c', 'd', 'e'], clauses: 3, width: [3, 4] },
 }
 
 const ATTEMPTS = 300
@@ -62,68 +64,6 @@ function randomClause(rng: Rng, profile: Profile): Clause {
   return normaliseClause(
     rng.sample(profile.variables, width).map((name) => ({ name, negated: rng.bool() })),
   )
-}
-
-/**
- * Wrong answers worth offering.
- *
- * Every one of these is a mistake a person actually makes, not noise: the
- * first is the classic "cancelled both pivots at once", and the rest are the
- * shapes a rushed answer takes.
- */
-function distractorsFor(rng: Rng, clauses: Clause[], real: Clause[]): Clause[] {
-  const out: Clause[] = []
-  const isNew = (candidate: Clause) =>
-    candidate.length > 0 &&
-    !real.some((clause) => clauseKey(clause) === clauseKey(candidate)) &&
-    !out.some((clause) => clauseKey(clause) === clauseKey(candidate)) &&
-    !clauses.some((clause) => clauseKey(clause) === clauseKey(candidate))
-
-  for (let i = 0; i < clauses.length; i++) {
-    for (let j = i + 1; j < clauses.length; j++) {
-      const left = clauses[i] as Clause
-      const right = clauses[j] as Clause
-      const pivots = sharedVariables(left, right).filter(
-        (pivot) => resolveOn(left, right, pivot) !== null,
-      )
-
-      // The big one: cancel every clashing pair at once. Always wrong, always
-      // tempting, and it is exactly what the tautological resolvents rule out.
-      if (pivots.length > 1) {
-        const both = normaliseClause([
-          ...left.filter((literal) => !pivots.includes(literal.name)),
-          ...right.filter((literal) => !pivots.includes(literal.name)),
-        ])
-        if (isNew(both)) out.push(both)
-      }
-
-      // The union with nothing cancelled — a merge rather than a resolution.
-      if (pivots.length > 0) {
-        const merged = normaliseClause([...left, ...right])
-        if (isNew(merged)) out.push(merged)
-      }
-
-      // A resolvent with one surviving literal dropped.
-      for (const pivot of pivots) {
-        const resolvent = resolveOn(left, right, pivot) as Clause
-        if (resolvent.length > 1) {
-          const trimmed = resolvent.slice(0, -1)
-          if (isNew(trimmed)) out.push(trimmed)
-        }
-        // A resolvent with one sign flipped.
-        if (resolvent.length > 0) {
-          const first = resolvent[0] as { name: string; negated: boolean }
-          const flipped = normaliseClause([
-            { name: first.name, negated: !first.negated },
-            ...resolvent.slice(1),
-          ])
-          if (isNew(flipped)) out.push(flipped)
-        }
-      }
-    }
-  }
-
-  return rng.shuffle(out)
 }
 
 function generate({ rng, difficulty }: GenerateContext): ResolventsQuestion {
@@ -154,16 +94,7 @@ function generate({ rng, difficulty }: GenerateContext): ResolventsQuestion {
     if (!real.some(isTautologicalClause)) continue
     if (real.some((clause) => clause.length === 0)) continue
 
-    const distractors = distractorsFor(rng, clauses, real).slice(0, profile.distractors)
-    if (distractors.length < 2) continue
-
-    const candidates = rng.shuffle([...real, ...distractors])
-    const correct = candidates
-      .map((clause, index) => ({ clause, index }))
-      .filter(({ clause }) => real.some((entry) => clauseKey(entry) === clauseKey(clause)))
-      .map(({ index }) => index)
-
-    return { clauses, candidates, correct }
+    return { clauses, resolvents: real }
   }
 
   // Last resort, so a round can never stall: the exam's own question.
@@ -183,47 +114,43 @@ function generate({ rng, difficulty }: GenerateContext): ResolventsQuestion {
     { name: 'f', negated: false },
   ]
   const clauses = [c1, c2, c3]
-  const candidates = allResolvents(clauses).map((step) => step.resolvent)
-  return { clauses, candidates, correct: candidates.map((_, index) => index) }
+  return { clauses, resolvents: allResolvents(clauses).map((step) => step.resolvent) }
 }
 
 // ---------------------------------------------------------------------------
 // Marking
 // ---------------------------------------------------------------------------
 
-const solve = (question: ResolventsQuestion): ResolventsAnswer => [...question.correct]
+const solve = (question: ResolventsQuestion): ResolventsAnswer => [...question.resolvents]
 
 function check(question: ResolventsQuestion, answer: ResolventsAnswer): Verdict {
-  const picked = new Set(answer)
-  const expected = new Set(question.correct)
+  const wanted = new Map(question.resolvents.map((clause) => [clauseKey(clause), clause]))
+  const found = new Set(answer.map(clauseKey))
 
-  const missed = [...expected].filter((index) => !picked.has(index))
-  const extra = [...picked].filter((index) => !expected.has(index))
+  const missed = [...wanted.keys()].filter((key) => !found.has(key))
+  // Every clause in the tray was produced by the board, so an extra can only
+  // be a duplicate; the count is what matters.
+  const extra = [...found].filter((key) => !wanted.has(key))
 
   if (missed.length === 0 && extra.length === 0) {
-    const tautologies = question.correct.filter((index) =>
-      isTautologicalClause(question.candidates[index] as Clause),
-    ).length
+    const tautologies = question.resolvents.filter(isTautologicalClause).length
     return {
       correct: true,
-      message: `${question.correct.length} resolvents`,
+      message: `All ${question.resolvents.length} found`,
       detail: `${tautologies} of them tautological — one pivot cancelled, the other clash left standing.`,
     }
   }
 
   return {
     correct: false,
-    // Says how far off, never which ones — sprint shows this before the retry.
+    // Says how many are left, never which: sprint shows this before the retry.
     message:
-      missed.length > 0 && extra.length > 0
-        ? `${missed.length} missed, ${extra.length} that are not resolvents`
-        : missed.length > 0
-          ? `${missed.length} resolvent${missed.length === 1 ? '' : 's'} missed`
-          : `${extra.length} of those ${extra.length === 1 ? 'is' : 'are'} not a resolvent`,
-    score: expected.size === 0 ? 0 : Math.max(0, (expected.size - missed.length - extra.length) / expected.size),
-    detail: `The resolvents are ${question.correct
-      .map((index) => showClause(question.candidates[index] as Clause))
-      .join(', ')}. Check every pair, and inside each pair every clashing variable separately.`,
+      missed.length > 0
+        ? `${missed.length} still to find`
+        : `${extra.length} of those are not resolvents`,
+    score:
+      wanted.size === 0 ? 0 : Math.max(0, (wanted.size - missed.length - extra.length) / wanted.size),
+    detail: `The full set is ${question.resolvents.map(showClause).join(', ')}. Check every pair, and inside each pair every clashing variable separately.`,
   }
 }
 
@@ -232,88 +159,136 @@ function check(question: ResolventsQuestion, answer: ResolventsAnswer): Verdict 
 // ---------------------------------------------------------------------------
 
 function Screen({ question, submit, locked, solution }: MinigameScreenProps<ResolventsQuestion, ResolventsAnswer>) {
-  const [picked, setPicked] = useState<number[]>([])
+  const [found, setFound] = useState<Clause[]>([])
+  const [selected, setSelected] = useState<number | null>(null)
+  const [pivots, setPivots] = useState<{ a: number; b: number; options: string[] } | null>(null)
+  const [shaking, shake] = useShake()
 
   useEffect(() => {
-    setPicked([])
+    setFound([])
+    setSelected(null)
+    setPivots(null)
   }, [question])
 
-  const toggle = (index: number) => {
-    if (locked) return
-    setPicked((previous) =>
-      previous.includes(index) ? previous.filter((entry) => entry !== index) : [...previous, index],
+  const add = (a: number, b: number, pivot: string) => {
+    const resolvent = resolveOn(question.clauses[a] as Clause, question.clauses[b] as Clause, pivot)
+    if (resolvent === null) return
+    setFound((previous) =>
+      previous.some((clause) => clauseKey(clause) === clauseKey(resolvent))
+        ? previous
+        : [...previous, resolvent],
     )
   }
 
-  const expected = new Set(solution ?? [])
+  const pick = (index: number) => {
+    if (locked || pivots !== null) return
+    if (selected === null) return setSelected(index)
+    if (selected === index) return setSelected(null)
+
+    const options = allResolvents([
+      question.clauses[selected] as Clause,
+      question.clauses[index] as Clause,
+    ])
+    setSelected(null)
+    if (options.length === 0) return shake()
+    if (options.length === 1) return add(selected, index, (options[0] as { pivot: string }).pivot)
+    setPivots({ a: selected, b: index, options: options.map((option) => option.pivot) })
+  }
+
+  const shown = locked ? (solution ?? found) : found
+  const remaining = question.resolvents.length - found.length
 
   return (
     <Card>
-      <p className="text-sm font-semibold uppercase tracking-widest text-ink-soft">
-        Which are resolvents?
-      </p>
-
-      <div className="mt-2 flex flex-col gap-1.5">
-        {question.clauses.map((clause, index) => (
-          <div key={index} className="flex items-center gap-2 rounded-xl bg-card-shade px-3 py-1.5">
-            <span className="text-xs font-bold text-ink-soft">C{index + 1}</span>
-            <ClauseText clause={clause} className="text-base font-bold" />
-          </div>
-        ))}
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+        <p className="text-sm font-semibold uppercase tracking-widest text-ink-soft">
+          Find every resolvent
+        </p>
+        <p className="text-xs font-bold text-ink-soft">
+          {found.length} of {question.resolvents.length}
+        </p>
       </div>
 
-      <p className="mt-3 text-xs font-medium text-ink-soft">
-        One pivot per step. Tick every clause reachable in a single resolution — tautological ones
-        included.
+      <p className="mt-1 text-xs font-medium text-ink-soft">
+        Tap two clauses to resolve them. One pivot per step — tautological results count.
       </p>
 
-      <div className="mt-2 flex flex-col gap-1.5">
-        {question.candidates.map((clause, index) => {
-          const isPicked = picked.includes(index)
-          const shouldBe = locked && expected.has(index)
-          const wrongPick = locked && isPicked && !expected.has(index)
-
-          return (
+      <Shakeable shaking={shaking}>
+        <div className="mt-2 flex flex-col gap-1.5">
+          {question.clauses.map((clause, index) => (
             <button
               key={index}
               type="button"
               disabled={locked}
-              onClick={() => toggle(index)}
-              className={`tile flex items-center gap-2 px-3 py-2 text-left
-                ${
-                  locked
-                    ? shouldBe
-                      ? 'bg-grass text-white'
-                      : wrongPick
-                        ? 'bg-space-red text-white'
-                        : 'bg-card-shade'
-                    : isPicked
-                      ? 'bg-space-blue text-white'
-                      : 'bg-card'
-                }`}
+              onClick={() => pick(index)}
+              className={`tile flex w-full items-center gap-2 px-3 py-2 text-left
+                ${selected === index ? 'bg-space-blue text-white' : 'bg-card'}`}
             >
-              <span
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-3 border-ink text-sm font-bold
-                  ${isPicked || shouldBe ? 'bg-white text-ink' : 'bg-white/60'}`}
-                aria-hidden
-              >
-                {isPicked ? '✓' : shouldBe ? '✓' : ''}
-              </span>
+              <span className="w-6 shrink-0 text-xs font-bold opacity-60">C{index + 1}</span>
               <ClauseText
                 clause={clause}
-                className={`text-base font-bold ${locked && (shouldBe || wrongPick) ? 'text-white' : ''}`}
+                className={`text-base font-bold ${selected === index ? 'text-white' : ''}`}
               />
-              {locked && isTautologicalClause(clause) && expected.has(index) && (
-                <span className="ml-auto whitespace-nowrap text-xs font-bold">tautology</span>
-              )}
             </button>
-          )
-        })}
+          ))}
+        </div>
+      </Shakeable>
+
+      {pivots !== null && !locked && (
+        <Pop className="tile mt-3 bg-coin p-3">
+          <p className="text-sm font-bold">
+            They clash on {pivots.options.length} variables — that is {pivots.options.length}{' '}
+            separate resolvents, not one.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {pivots.options.map((pivot) => (
+              <Button
+                key={pivot}
+                variant="secondary"
+                onClick={() => {
+                  add(pivots.a, pivots.b, pivot)
+                  setPivots(null)
+                }}
+              >
+                {pivot}
+              </Button>
+            ))}
+            <Button variant="ghost" onClick={() => setPivots(null)}>
+              Cancel
+            </Button>
+          </div>
+        </Pop>
+      )}
+
+      <p className="mt-3 text-xs font-bold uppercase tracking-wider text-ink-soft">Your tray</p>
+      <div className="mt-1">
+        <ProgressBar value={found.length} total={question.resolvents.length} />
       </div>
 
+      <MovingList className="mt-2 flex flex-col gap-1.5">
+        {shown.map((clause) => (
+          <MovingItem
+            key={clauseKey(clause)}
+            id={clauseKey(clause)}
+            disabled
+            className="tile flex w-full items-center gap-2 bg-grass px-3 py-1.5 text-left text-white"
+          >
+            <ClauseText clause={clause} className="text-base font-bold" />
+            {isTautologicalClause(clause) && (
+              <span className="ml-auto text-xs font-bold uppercase tracking-wider">tautology</span>
+            )}
+          </MovingItem>
+        ))}
+        {shown.length === 0 && (
+          <p className="rounded-xl bg-card-shade px-3 py-2 text-sm font-semibold text-ink-soft">
+            Nothing yet.
+          </p>
+        )}
+      </MovingList>
+
       {!locked && (
-        <Button variant="coin" className="mt-4 w-full" onClick={() => submit(picked)}>
-          {picked.length === 0 ? 'None of them' : `Check ${picked.length} selected`}
+        <Button variant="coin" className="mt-3 w-full" onClick={() => submit(found)}>
+          {remaining <= 0 ? 'Submit' : `Submit — ${remaining} still out there`}
         </Button>
       )}
     </Card>
@@ -333,5 +308,5 @@ export const resolventsGame = defineMinigame<ResolventsQuestion, ResolventsAnswe
   solve,
   Screen,
   Guide: ResolventsGuide,
-  questionKey: (question) => question.candidates.map(clauseKey).join(';'),
+  questionKey: (question) => question.clauses.map(clauseKey).join(';'),
 })

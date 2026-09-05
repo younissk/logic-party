@@ -1,17 +1,16 @@
 /**
  * The DP procedure — ln.pdf §2.4, exam26a and exam26bA Q1.2.
  *
- * Not DPLL. DP has no tree and no backtracking: it deletes variables one at a
- * time by resolution. For variable v, resolve every clause containing v
- * against every clause containing ¬v, throw away the tautologies, then delete
- * all the originals mentioning v and add the survivors.
+ * You run the elimination. Tap a variable and the clauses mentioning it leave,
+ * the resolvents arrive, and the tautologies among them burn off on the way —
+ * which is the step people skip when they only have to recognise it.
  *
- * The endpoint rule is the only thing you must not confuse:
- *   ends with the empty formula → satisfiable
- *   produces the empty clause   → unsatisfiable
+ * Keep going until nothing is left. Where you end is the answer: the empty
+ * formula means satisfiable, the empty clause means unsatisfiable, and mixing
+ * those two up is the only thing this question really tests.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Clause } from '@/logic'
 import {
   clauseKey,
@@ -19,24 +18,25 @@ import {
   eliminateVariable,
   isTautologicalClause,
   normaliseClause,
-  resolveOn,
   showClauseSet,
 } from '@/logic'
 import { defineMinigame } from '@/engine/registry'
 import type { Difficulty, GenerateContext, MinigameScreenProps, Verdict } from '@/engine/types'
-import { Card } from '@/ui/primitives'
-import { ClauseList, ClauseSetChoice } from '@/ui/ClauseSet'
+import { Button, Card } from '@/ui/primitives'
+import { ClauseText } from '@/ui/ClauseText'
+import { ClauseSetText } from '@/ui/ClauseSet'
+import { MovingItem, MovingList, Pop, ProgressBar } from '@/ui/motion'
 import { VariableName } from '@/ui/FormulaText'
 import { DpEliminateGuide } from './dpEliminate.guide'
 
 export interface DpQuestion {
   clauses: Clause[]
-  variable: string
-  options: Clause[][]
-  answer: number
+  /** Variables that have to go, so the meter has something to measure. */
+  variables: string[]
 }
 
-export type DpAnswer = number
+/** The variables eliminated, in the order chosen. */
+export type DpAnswer = string[]
 
 // ---------------------------------------------------------------------------
 // Generation
@@ -52,49 +52,6 @@ const PROFILES: Record<Difficulty, Profile> = {
   easy: { variables: ['x', 'y', 'z'], clauses: [3, 4], width: [2, 2] },
   medium: { variables: ['x', 'y', 'z'], clauses: [4, 6], width: [2, 3] },
   hard: { variables: ['w', 'x', 'y', 'z'], clauses: [5, 7], width: [2, 3] },
-}
-
-const setKey = (set: readonly Clause[]) => [...set.map(clauseKey)].sort().join(';')
-
-/**
- * The three ways an elimination goes wrong.
- *
- * All of them produce something that looks like a plausible clause set, which
- * is the point: the difference between them is precisely the definition.
- */
-function distractors(clauses: readonly Clause[], variable: string): Clause[][] {
-  const positive = clauses.filter((clause) =>
-    clause.some((literal) => literal.name === variable && !literal.negated),
-  )
-  const negative = clauses.filter((clause) =>
-    clause.some((literal) => literal.name === variable && literal.negated),
-  )
-  const untouched = clauses.filter((clause) => !clause.some((literal) => literal.name === variable))
-
-  const resolvents: Clause[] = []
-  const withTautologies: Clause[] = []
-  for (const left of positive) {
-    for (const right of negative) {
-      const resolvent = resolveOn(left, right, variable)
-      if (resolvent === null) continue
-      if (!withTautologies.some((clause) => clauseKey(clause) === clauseKey(resolvent))) {
-        withTautologies.push(resolvent)
-      }
-      if (isTautologicalClause(resolvent)) continue
-      if (!resolvents.some((clause) => clauseKey(clause) === clauseKey(resolvent))) {
-        resolvents.push(resolvent)
-      }
-    }
-  }
-
-  return [
-    // Kept the tautological resolvents.
-    [...untouched, ...withTautologies],
-    // Forgot to delete the originals mentioning the variable.
-    [...clauses, ...resolvents],
-    // Deleted the originals but never added the resolvents.
-    [...untouched],
-  ]
 }
 
 const ATTEMPTS = 400
@@ -116,38 +73,22 @@ function generate({ rng, difficulty }: GenerateContext): DpQuestion {
     }
     if (clauses.length !== count) continue
 
-    const candidates = [...new Set(clauses.flatMap(clauseVariables))].filter(
-      (variable) =>
-        clauses.some((clause) => clause.some((l) => l.name === variable && !l.negated)) &&
-        clauses.some((clause) => clause.some((l) => l.name === variable && l.negated)),
+    const variables = [...new Set(clauses.flatMap(clauseVariables))].sort((a, b) =>
+      a.localeCompare(b),
     )
-    if (candidates.length === 0) continue
+    if (variables.length < 2) continue
 
-    const variable = rng.pick(candidates)
-    const step = eliminateVariable(clauses, variable)
-    // At least one tautology dropped, because that is the rule being tested.
-    if (step.discarded.length === 0) continue
-    if (step.result.length === 0 || step.result.length > 6) continue
+    // At least one elimination has to throw a tautology away, or the rule the
+    // question is about never comes up.
+    const dropsSomething = variables.some(
+      (variable) => eliminateVariable(clauses, variable).discarded.length > 0,
+    )
+    if (!dropsSomething) continue
 
-    const truth = step.result
-    const wrong: Clause[][] = []
-    for (const option of distractors(clauses, variable)) {
-      if (setKey(option) === setKey(truth)) continue
-      if (wrong.some((existing) => setKey(existing) === setKey(option))) continue
-      wrong.push(option)
-    }
-    if (wrong.length < 2) continue
-
-    const options = rng.shuffle([truth, ...wrong])
-    return {
-      clauses,
-      variable,
-      options,
-      answer: options.findIndex((option) => setKey(option) === setKey(truth)),
-    }
+    return { clauses, variables }
   }
 
-  // Last resort, so a round can never stall: the exam's own first step.
+  // Last resort, so a round can never stall: the exam's own question.
   const clauses: Clause[] = [
     [
       { name: 'x', negated: true },
@@ -168,28 +109,56 @@ function generate({ rng, difficulty }: GenerateContext): DpQuestion {
       { name: 'z', negated: true },
     ],
   ]
-  const truth = eliminateVariable(clauses, 'x').result
-  return { clauses, variable: 'x', options: [truth], answer: 0 }
+  return { clauses, variables: ['x', 'y', 'z'] }
 }
 
 // ---------------------------------------------------------------------------
 // Marking
 // ---------------------------------------------------------------------------
 
-const solve = (question: DpQuestion): DpAnswer => question.answer
+const solve = (question: DpQuestion): DpAnswer => [...question.variables]
+
+/**
+ * Replay an elimination order, stopping at the empty clause as DP does.
+ *
+ * A variable the formula no longer mentions is skipped rather than refused:
+ * eliminating one variable routinely takes another with it, when every clause
+ * that mentioned it was consumed. Asking for a variable that is already gone
+ * is a no-op, not an illegal move.
+ */
+export function runElimination(clauses: readonly Clause[], order: readonly string[]): Clause[] {
+  let current = clauses.map((clause) => normaliseClause(clause))
+  for (const variable of order) {
+    if (current.some((clause) => clause.length === 0)) break
+    if (!current.some((clause) => clause.some((literal) => literal.name === variable))) continue
+    current = eliminateVariable(current, variable).result
+  }
+  return current
+}
+
+export const verdictOf = (clauses: readonly Clause[]): 'satisfiable' | 'unsatisfiable' =>
+  clauses.some((clause) => clause.length === 0) ? 'unsatisfiable' : 'satisfiable'
 
 function check(question: DpQuestion, answer: DpAnswer): Verdict {
-  const step = eliminateVariable(question.clauses, question.variable)
-  const summary = `${step.removed.length} clauses mentioned ${question.variable} and all of them go; of the resolvents, ${step.discarded.length} ${step.discarded.length === 1 ? 'was a tautology' : 'were tautologies'} and ${step.added.length} survived.`
-
-  if (answer === question.answer) {
-    return { correct: true, message: `${question.variable} eliminated`, detail: summary }
+  const result = runElimination(question.clauses, answer)
+  const conflicted = result.some((clause) => clause.length === 0)
+  if (!conflicted && result.length > 0) {
+    return {
+      correct: false,
+      message: 'Something is still standing',
+      detail: `${result.length} clause${result.length === 1 ? '' : 's'} left. Keep eliminating: DP finishes at the empty formula or at the empty clause, and nowhere else.`,
+      score: answer.length / Math.max(question.variables.length, 1),
+    }
   }
 
+  const verdict = verdictOf(result)
   return {
-    correct: false,
-    message: 'Not what elimination leaves',
-    detail: `${showClauseSet(step.result)} is what is left. ${summary}`,
+    correct: true,
+    message: conflicted ? 'Empty clause — unsatisfiable' : 'Empty formula — satisfiable',
+    detail:
+      verdict === 'satisfiable'
+        ? 'Every clause was eliminated away, and reaching the empty formula is what proves it satisfiable.'
+        : 'A clause lost its last literal. The empty clause is false under everything, so the formula is unsatisfiable.',
   }
 }
 
@@ -197,47 +166,129 @@ function check(question: DpQuestion, answer: DpAnswer): Verdict {
 // Screen
 // ---------------------------------------------------------------------------
 
-function Screen({ question, submit, locked, solution }: MinigameScreenProps<DpQuestion, DpAnswer>) {
-  const [, setPicked] = useState<number | null>(null)
+function Screen({ question, submit, locked }: MinigameScreenProps<DpQuestion, DpAnswer>) {
+  const [order, setOrder] = useState<string[]>([])
+  const [last, setLast] = useState<ReturnType<typeof eliminateVariable> | null>(null)
 
   useEffect(() => {
-    setPicked(null)
+    setOrder([])
+    setLast(null)
   }, [question])
 
-  const step = eliminateVariable(question.clauses, question.variable)
+  const result = useMemo(() => runElimination(question.clauses, order), [question, order])
+  const left = useMemo(
+    () => [...new Set(result.flatMap(clauseVariables))].sort((a, b) => a.localeCompare(b)),
+    [result],
+  )
+
+  // Keyed by content, not by position: after a propagation the indices shift,
+  // and an index-keyed list looks to AnimatePresence like every item was
+  // replaced — so nothing ever finished exiting and the board showed the old
+  // clauses alongside the new ones. Deduplicated for the same reason a clause
+  // set is a set: striking a literal can make two clauses equal.
+  const shown = result.filter(
+    (clause, index) => result.findIndex((other) => clauseKey(other) === clauseKey(clause)) === index,
+  )
+
+  const conflicted = result.some((clause) => clause.length === 0)
+  const done = conflicted || result.length === 0
+
+  const eliminate = (variable: string) => {
+    if (locked || done) return
+    setLast(eliminateVariable(result, variable))
+    setOrder((previous) => [...previous, variable])
+  }
 
   return (
     <Card>
-      <p className="text-sm font-semibold uppercase tracking-widest text-ink-soft">
-        Eliminate <VariableName name={question.variable} className="text-base" />
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+        <p className="text-sm font-semibold uppercase tracking-widest text-ink-soft">
+          Eliminate every variable
+        </p>
+        <p className="text-xs font-bold text-ink-soft">
+          {order.length} of {question.variables.length} gone
+        </p>
+      </div>
+
+      <p className="mt-1 text-xs font-medium text-ink-soft">
+        Tap a variable: every clause mentioning it goes, the resolvents arrive, tautologies among
+        them are thrown away.
       </p>
 
-      <ClauseList set={question.clauses} className="mt-2" />
+      <MovingList className="mt-2 flex flex-col gap-1.5">
+        {shown.map((clause) => (
+          <MovingItem
+            key={clauseKey(clause)}
+            id={clauseKey(clause)}
+            disabled
+            className={`tile flex w-full items-center px-3 py-2 text-left
+              ${clause.length === 0 ? 'bg-space-red text-white' : 'bg-card'}`}
+          >
+            <ClauseText clause={clause} className="text-base font-bold" />
+            {clause.length === 0 && (
+              <span className="ml-auto text-xs font-bold uppercase tracking-wider">
+                the empty clause
+              </span>
+            )}
+          </MovingItem>
+        ))}
+        {shown.length === 0 && (
+          <Pop className="tile bg-grass px-3 py-2">
+            <p className="formula text-base font-bold text-white">⊤ — the empty formula</p>
+          </Pop>
+        )}
+      </MovingList>
 
-      <p className="mt-3 text-xs font-medium text-ink-soft">
-        Resolve every clause containing <VariableName name={question.variable} /> against every
-        clause containing ¬<VariableName name={question.variable} />, drop the tautologies, then
-        delete all the originals that mention it.
-      </p>
+      {last !== null && last.discarded.length > 0 && (
+        <Pop className="mt-2 rounded-xl bg-card-shade px-3 py-1.5 text-xs font-semibold text-ink-soft">
+          {last.discarded.length} tautological resolvent{last.discarded.length === 1 ? '' : 's'}{' '}
+          thrown away · {last.added.length} kept
+        </Pop>
+      )}
 
-      <ClauseSetChoice
-        options={question.options}
-        solution={solution}
-        locked={locked}
-        onPick={(index) => {
-          setPicked(index)
-          submit(index)
-        }}
-      />
+      {!locked && !done && (
+        <div className="mt-3 flex flex-wrap gap-2">
+          {left.map((variable) => (
+            <Button
+              key={variable}
+              variant="secondary"
+              className="min-h-11 px-4"
+              onClick={() => eliminate(variable)}
+            >
+              <VariableName name={variable} />
+            </Button>
+          ))}
+        </div>
+      )}
+
+      <div className="mt-3">
+        <ProgressBar value={order.length} total={question.variables.length} />
+      </div>
+
+      {!locked && (
+        <Button
+          variant={done ? 'coin' : 'secondary'}
+          className="mt-2 w-full"
+          onClick={() => submit(order)}
+        >
+          {done
+            ? conflicted
+              ? 'Done — unsatisfiable'
+              : 'Done — satisfiable'
+            : `Stop here (${left.length} variable${left.length === 1 ? '' : 's'} left)`}
+        </Button>
+      )}
 
       {locked && (
-        <div className="mt-3 rounded-2xl bg-card-shade p-3 text-sm font-medium">
-          <p className="text-xs font-bold uppercase tracking-wider text-ink-soft">The count</p>
+        <Pop className="mt-3 rounded-2xl bg-card-shade p-3 text-sm font-medium">
+          <p className="text-xs font-bold uppercase tracking-wider text-ink-soft">Where DP ends</p>
           <p className="mt-1">
-            {step.removed.length} clauses deleted · {step.added.length + step.discarded.length}{' '}
-            resolvents, {step.discarded.length} tautological · {step.added.length} kept
+            <ClauseSetText set={runElimination(question.clauses, question.variables)} />
           </p>
-        </div>
+          <p className="mt-1 text-xs text-ink-soft">
+            {showClauseSet(runElimination(question.clauses, question.variables))}
+          </p>
+        </Pop>
       )}
     </Card>
   )
@@ -246,16 +297,15 @@ function Screen({ question, submit, locked, solution }: MinigameScreenProps<DpQu
 export const dpGame = defineMinigame<DpQuestion, DpAnswer>({
   id: 'dp',
   title: 'Eliminate',
-  tagline: 'Delete a variable by resolving it away.',
+  tagline: 'Resolve every variable away and see where you land.',
   topics: ['resolution', 'satisfiability'],
   icon: '🧹',
   roundSeconds: 180,
   sprintQuestions: 6,
-  sprintPenaltySeconds: 10,
   generate,
   check,
   solve,
   Screen,
   Guide: DpEliminateGuide,
-  questionKey: (question) => `${question.variable}|${question.clauses.map(clauseKey).join(';')}`,
+  questionKey: (question) => question.clauses.map(clauseKey).join(';'),
 })

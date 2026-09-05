@@ -276,26 +276,22 @@ export function PropertyGuide() {
           <Prose>
             <ul className="flex list-disc flex-col gap-2 pl-5">
               <li>
-                One tap answers. There is no submit button — pick a box and the round moves on.
+                Flip variables and watch the value. Bank a row that makes it{' '}
+                <strong>true</strong> and a row that makes it <strong>false</strong> — or claim
+                there is none, which is what makes a formula valid or unsatisfiable.
               </li>
               <li>
-                Answers are drawn evenly across the three boxes, so “satisfiable, not valid” is not
-                a safe default. Roughly a third of questions are valid and a third unsatisfiable.
+                You never name the property. Two rows means contingent, no false row means valid,
+                no true row means unsatisfiable — the classification falls out.
               </li>
               <li>
-                After you answer, the feedback names the actual <strong>witness</strong>: the model,
-                the counter-model, or how many of the rows are models. That is the evidence
-                Definition 2.6 asks for, so read it even when you were right.
+                Banking is refused unless the current row actually does what you are claiming, so a
+                wrong witness cannot be banked by accident. Claiming "none exists" is not checked
+                until you submit.
               </li>
               <li>
-                <strong>Sprint</strong> will not move on until you are right, and a wrong attempt
-                here costs <strong>12 seconds</strong> rather than the usual 5 — with three options,
-                a cheaper penalty would make guessing faster than thinking.
-              </li>
-              <li>
-                <strong>Easy</strong> is two variables and small formulas, <strong>hard</strong> is
-                three variables and up to about twenty symbols. On hard, look for the law before you
-                reach for the table.
+                Half credit for getting one slot right. Answers spread evenly across the three
+                properties, so no habit pays off.
               </li>
             </ul>
           </Prose>

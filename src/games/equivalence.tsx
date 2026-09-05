@@ -18,10 +18,13 @@
  * merely sat-equivalent, they are *equivalent*, however unrelated they look.
  */
 
-import type { Formula } from '@/logic'
+import { useEffect, useState } from 'react'
+import type { Assignment, Formula } from '@/logic'
 import {
   and,
   eliminateImplications,
+  evaluate,
+  findModel,
   format,
   isEquivalent,
   isSatisfiable,
@@ -39,7 +42,8 @@ import {
 import { defineMinigame } from '@/engine/registry'
 import type { Difficulty, GenerateContext, MinigameScreenProps, Verdict } from '@/engine/types'
 import { Button, Card } from '@/ui/primitives'
-import { FormulaText } from '@/ui/FormulaText'
+import { Pop } from '@/ui/motion'
+import { WitnessHunt, type Banked } from '@/ui/WitnessHunt'
 import { EquivalenceGuide } from './equivalence.guide'
 
 export type Relationship = 'equivalent' | 'sat-equivalent' | 'neither'
@@ -52,18 +56,34 @@ export const RELATIONSHIP_LABELS: Readonly<Record<Relationship, string>> = {
   neither: 'Neither',
 }
 
-const RELATIONSHIP_HINTS: Readonly<Record<Relationship, string>> = {
-  equivalent: 'Exactly the same models',
-  'sat-equivalent': 'Both satisfiable, but different models',
-  neither: 'One is satisfiable, the other is not',
-}
 
 export interface EquivalenceQuestion {
   left: Formula
   right: Formula
 }
 
-export type EquivalenceAnswer = Relationship
+/**
+ * The evidence again, not the label.
+ *
+ * All three relationships are settled by three questions, each answered by a
+ * row or by the claim that no row answers it: does φ have a model, does ψ,
+ * and is there a row where they disagree. Picking "satisfiability equivalent
+ * only" off a list never makes you produce the row that separates them.
+ */
+export interface EquivalenceAnswer {
+  /** A row satisfying φ, or null for "φ has none". */
+  leftModel: Assignment | null
+  /** A row satisfying ψ, or null. */
+  rightModel: Assignment | null
+  /** A row where they differ, or null for "nothing separates them". */
+  separator: Assignment | null
+}
+
+/** What a completed hunt says the pair are. */
+export function relationshipFromWitnesses(answer: EquivalenceAnswer): Relationship {
+  if (answer.separator === null) return 'equivalent'
+  return (answer.leftModel === null) === (answer.rightModel === null) ? 'sat-equivalent' : 'neither'
+}
 
 /** The one source of truth for what the relationship is. */
 export function classifyPair(left: Formula, right: Formula): Relationship {
@@ -187,13 +207,16 @@ function generate({ rng, difficulty }: GenerateContext): EquivalenceQuestion {
 // Marking
 // ---------------------------------------------------------------------------
 
-const solve = (question: EquivalenceQuestion): EquivalenceAnswer =>
-  classifyPair(question.left, question.right)
+const solve = (question: EquivalenceQuestion): EquivalenceAnswer => ({
+  leftModel: findModel(question.left),
+  rightModel: findModel(question.right),
+  separator: findDistinguishingAssignment(question.left, question.right),
+})
 
 /** The evidence, in the terms the definitions are stated in. */
 export function evidence(question: EquivalenceQuestion): string {
   const { left, right } = question
-  const truth = solve(question)
+  const truth = classifyPair(left, right)
   const leftSat = isSatisfiable(left)
 
   if (truth === 'equivalent') {
@@ -215,15 +238,47 @@ export function evidence(question: EquivalenceQuestion): string {
 }
 
 function check(question: EquivalenceQuestion, answer: EquivalenceAnswer): Verdict {
-  const truth = solve(question)
-  if (answer === truth) {
-    return { correct: true, message: RELATIONSHIP_LABELS[truth], detail: evidence(question) }
+  const problems: string[] = []
+  let right = 0
+
+  const checkModel = (slot: 'leftModel' | 'rightModel', formula: Formula, label: string) => {
+    const banked = answer[slot]
+    if (banked !== null) {
+      if (evaluate(formula, banked)) right++
+      else problems.push(`${showAssignment(banked)} does not satisfy ${label}.`)
+      return
+    }
+    const real = findModel(formula)
+    if (real === null) right++
+    else problems.push(`${label} does have a model: ${showAssignment(real)}.`)
   }
+
+  checkModel('leftModel', question.left, 'φ')
+  checkModel('rightModel', question.right, 'ψ')
+
+  const separator = answer.separator
+  if (separator !== null) {
+    if (evaluate(question.left, separator) !== evaluate(question.right, separator)) right++
+    else problems.push(`${showAssignment(separator)} gives both the same value, so it separates nothing.`)
+  } else {
+    const real = findDistinguishingAssignment(question.left, question.right)
+    if (real === null) right++
+    else problems.push(`${showAssignment(real)} does separate them.`)
+  }
+
+  if (problems.length > 0) {
+    return {
+      correct: false,
+      score: right / 3,
+      message: problems.length === 1 ? 'One claim does not hold' : `${problems.length} claims do not hold`,
+      detail: problems.join(' '),
+    }
+  }
+
   return {
-    correct: false,
-    // A pure function of what was picked — sprint shows this before the retry.
-    message: `Not “${RELATIONSHIP_LABELS[answer]}”`,
-    detail: `It is ${RELATIONSHIP_LABELS[truth].toLowerCase()}. ${evidence(question)}`,
+    correct: true,
+    message: RELATIONSHIP_LABELS[classifyPair(question.left, question.right)],
+    detail: evidence(question),
   }
 }
 
@@ -231,54 +286,93 @@ function check(question: EquivalenceQuestion, answer: EquivalenceAnswer): Verdic
 // Screen
 // ---------------------------------------------------------------------------
 
-function Side({ label, formula }: { label: string; formula: Formula }) {
-  const printed = format(formula)
-  const scale = printed.length > 40 ? 'text-base' : printed.length > 26 ? 'text-lg' : 'text-xl'
-  return (
-    <div className="rounded-2xl bg-card-shade px-3 py-2">
-      <p className="formula text-xs font-bold text-ink-soft">{label}</p>
-      <p className={`leading-snug font-semibold text-balance ${scale}`}>
-        <FormulaText formula={formula} />
-      </p>
-    </div>
-  )
-}
 
 function Screen({ question, submit, locked, solution }: MinigameScreenProps<EquivalenceQuestion, EquivalenceAnswer>) {
+  const [banked, setBanked] = useState<Banked>({})
+
+  useEffect(() => {
+    setBanked({})
+  }, [question])
+
+  const answer: EquivalenceAnswer = {
+    leftModel: banked.leftModel ?? null,
+    rightModel: banked.rightModel ?? null,
+    separator: banked.separator ?? null,
+  }
+  const settled =
+    banked.leftModel !== undefined && banked.rightModel !== undefined && banked.separator !== undefined
+
   return (
     <Card>
       <p className="text-sm font-semibold uppercase tracking-widest text-ink-soft">
-        How do these relate?
+        Three questions, three rows
+      </p>
+      <p className="mt-1 mb-2 text-xs font-medium text-ink-soft">
+        Does each have a model, and is there a row where they disagree? The relationship follows
+        from the answers — you never have to name it.
       </p>
 
-      <div className="mt-2 flex flex-col gap-2">
-        <Side label="φ" formula={question.left} />
-        <Side label="ψ" formula={question.right} />
-      </div>
+      <WitnessHunt
+        locked={locked}
+        formulas={[
+          { label: 'φ', formula: question.left },
+          { label: 'ψ', formula: question.right },
+        ]}
+        banked={banked}
+        onBank={(id, assignment) => setBanked((previous) => ({ ...previous, [id]: assignment }))}
+        goals={[
+          {
+            id: 'leftModel',
+            label: 'A row satisfying φ',
+            noneLabel: 'φ has none',
+            test: (assignment) => evaluate(question.left, assignment),
+          },
+          {
+            id: 'rightModel',
+            label: 'A row satisfying ψ',
+            noneLabel: 'ψ has none',
+            test: (assignment) => evaluate(question.right, assignment),
+          },
+          {
+            id: 'separator',
+            label: 'A row where they disagree',
+            noneLabel: 'Nothing separates them',
+            test: (assignment) =>
+              evaluate(question.left, assignment) !== evaluate(question.right, assignment),
+          },
+        ]}
+        footer={
+          <>
+            {!locked && (
+              <Button
+                variant="coin"
+                className="mt-3 w-full"
+                disabled={!settled}
+                onClick={() => submit(answer)}
+              >
+                {settled
+                  ? `Submit — ${RELATIONSHIP_LABELS[relationshipFromWitnesses(answer)].toLowerCase()}`
+                  : 'Settle all three first'}
+              </Button>
+            )}
 
-      <div className="mt-4 flex flex-col gap-2">
-        {RELATIONSHIPS.map((option) => {
-          const isAnswer = locked && solution === option
-          return (
-            <Button
-              key={option}
-              variant={isAnswer ? 'primary' : 'secondary'}
-              disabled={locked}
-              onClick={() => submit(option)}
-              className={`w-full flex-col items-start gap-0 py-3 text-left
-                ${isAnswer ? 'revealed' : ''} ${locked && !isAnswer ? 'opacity-50' : ''}`}
-            >
-              <span className="block text-base font-bold">{RELATIONSHIP_LABELS[option]}</span>
-              <span className="block text-sm font-medium opacity-80">{RELATIONSHIP_HINTS[option]}</span>
-            </Button>
-          )
-        })}
-      </div>
-
-      <p className="mt-3 text-xs font-medium text-ink-soft">
-        Equivalence always implies satisfiability equivalence, never the reverse — so “equivalent” is
-        the answer whenever the models match, even if the formulas look nothing alike.
-      </p>
+            {locked && (
+              <Pop className="mt-3 rounded-2xl bg-card-shade p-3">
+                <p className="text-xs font-bold uppercase tracking-wider text-ink-soft">
+                  What that makes them
+                </p>
+                <p className="mt-1 text-base font-bold">
+                  {RELATIONSHIP_LABELS[relationshipFromWitnesses(solution ?? answer)]}
+                </p>
+                <p className="mt-1 text-xs font-medium text-ink-soft">
+                  No separator means the model sets are identical, which is equivalence — and two
+                  formulas with no models at all have identical model sets too.
+                </p>
+              </Pop>
+            )}
+          </>
+        }
+      />
     </Card>
   )
 }
@@ -293,7 +387,6 @@ export const equivalenceGame = defineMinigame<EquivalenceQuestion, EquivalenceAn
   sprintQuestions: 10,
   // Three options and no advance until correct: the default five seconds would
   // make guessing cheaper than comparing the model sets.
-  sprintPenaltySeconds: 12,
   generate,
   check,
   solve,

@@ -1,7 +1,14 @@
 /**
  * Is clause X derivable? — ln.pdf §2.3, exam26a and exam26bA Q1.1.
  *
- * The checkbox question, and it rewards two ideas rather than grinding:
+ * You do not tick the reachable clauses, you *reach* them: resolve on the
+ * bench until a candidate appears, and what you hand in is what you actually
+ * built. Which makes the two shortcuts below worth something — they tell you
+ * where not to spend the clock — and makes the impossible candidates
+ * impossible rather than merely wrong. The board will not let you bridge two
+ * components, because no such resolution step exists.
+ *
+ * Two ideas the question rewards over grinding:
  *
  *   1. Run BCP first. If the set is unsatisfiable then ⊥ is derivable, because
  *      resolution is refutation complete — that settles the empty clause with
@@ -15,15 +22,17 @@
  * which is exactly what happens to (c ∨ d) in the exam.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import type { Clause } from '@/logic'
 import {
+  allResolvents,
   clauseKey,
   clauseSetToFormula,
   components,
   isSatisfiable,
   isTautologicalClause,
   normaliseClause,
+  resolveOn,
   saturate,
   sharedVariables,
   showClause,
@@ -33,6 +42,7 @@ import { defineMinigame } from '@/engine/registry'
 import type { Difficulty, GenerateContext, MinigameScreenProps, Verdict } from '@/engine/types'
 import { Button, Card } from '@/ui/primitives'
 import { ClauseText } from '@/ui/ClauseText'
+import { MovingItem, MovingList, Pop, Shakeable, useShake } from '@/ui/motion'
 import { DerivableGuide } from './derivable.guide'
 
 export interface DerivableQuestion {
@@ -272,45 +282,191 @@ function check(question: DerivableQuestion, answer: DerivableAnswer): Verdict {
 // ---------------------------------------------------------------------------
 
 function Screen({ question, submit, locked, solution }: MinigameScreenProps<DerivableQuestion, DerivableAnswer>) {
-  const [picked, setPicked] = useState<number[]>([])
-
-  useEffect(() => {
-    setPicked([])
+  // The bench starts as the given clauses and only ever grows, so a card is
+  // never mid-exit and never holds a stale board.
+  const initial = useMemo(() => {
+    const seen = new Set<string>()
+    const list: Clause[] = []
+    for (const clause of question.clauses) {
+      const normalised = normaliseClause(clause)
+      const key = clauseKey(normalised)
+      if (seen.has(key)) continue
+      seen.add(key)
+      list.push(normalised)
+    }
+    return list
   }, [question])
 
-  const toggle = (index: number) => {
-    if (locked) return
-    setPicked((previous) =>
-      previous.includes(index) ? previous.filter((entry) => entry !== index) : [...previous, index],
-    )
+  const [bench, setBench] = useState<Clause[]>(initial)
+  const [selected, setSelected] = useState<string | null>(null)
+  const [pivots, setPivots] = useState<{ a: Clause; b: Clause; options: string[] } | null>(null)
+  const [note, setNote] = useState<string | null>(null)
+  const [shaking, shake] = useShake()
+
+  useEffect(() => {
+    setBench(initial)
+    setSelected(null)
+    setPivots(null)
+    setNote(null)
+  }, [initial])
+
+  const benchKeys = new Set(bench.map(clauseKey))
+  const reached = question.candidates
+    .map((clause, index) => ({ key: clauseKey(clause), index }))
+    .filter(({ key }) => benchKeys.has(key))
+    .map(({ index }) => index)
+
+  const derived = bench.slice(initial.length)
+  const expected = new Set(solution ?? [])
+
+  const resolve = (a: Clause, b: Clause, pivot: string) => {
+    const resolvent = resolveOn(a, b, pivot)
+    if (resolvent === null) return
+    // Saturation never expands a tautology, so neither does the bench — the
+    // dead end the notes warn about is the board refusing the move, not a
+    // clause you have to notice is useless later.
+    if (isTautologicalClause(resolvent)) {
+      setNote('That resolvent is a tautology. Resolution throws those away — dead end.')
+      shake()
+      return
+    }
+    if (benchKeys.has(clauseKey(resolvent))) {
+      setNote('Already on the bench.')
+      return
+    }
+    setNote(null)
+    setBench((previous) => [...previous, resolvent])
   }
 
-  const expected = new Set(solution ?? [])
+  const pick = (clause: Clause) => {
+    const key = clauseKey(clause)
+    if (locked || pivots !== null) return
+    if (selected === null) {
+      setSelected(key)
+      setNote(null)
+      return
+    }
+    if (selected === key) {
+      setSelected(null)
+      return
+    }
+    const left = bench.find((entry) => clauseKey(entry) === selected)
+    setSelected(null)
+    if (left === undefined) return
+
+    const options = allResolvents([left, clause])
+    if (options.length === 0) {
+      setNote('No shared variable to resolve on — these two cannot be combined.')
+      shake()
+      return
+    }
+    if (options.length === 1) {
+      resolve(left, clause, (options[0] as { pivot: string }).pivot)
+      return
+    }
+    setPivots({ a: left, b: clause, options: options.map((option) => option.pivot) })
+  }
+
   const groups = components(question.clauses)
   const satisfiable = isSatisfiable(clauseSetToFormula(question.clauses))
 
+  const benchTile = (clause: Clause) => {
+    const key = clauseKey(clause)
+    const chosen = selected === key
+    return (
+      <MovingItem
+        key={key}
+        id={key}
+        disabled={locked}
+        onClick={() => pick(clause)}
+        className={`tile flex w-full items-center gap-2 px-3 py-2 text-left
+          ${
+            chosen
+              ? 'bg-space-blue text-white'
+              : clause.length === 0
+                ? 'bg-space-red text-white'
+                : 'bg-card'
+          }`}
+      >
+        <ClauseText clause={clause} className={`text-base font-bold ${chosen ? 'text-white' : ''}`} />
+        {clause.length === 0 && (
+          <span className="ml-auto text-xs font-bold uppercase tracking-wider">refutation</span>
+        )}
+      </MovingItem>
+    )
+  }
+
   return (
     <Card>
-      <p className="text-sm font-semibold uppercase tracking-widest text-ink-soft">
-        Which can resolution derive?
+      <div className="flex flex-wrap items-baseline justify-between gap-x-3">
+        <p className="text-sm font-semibold uppercase tracking-widest text-ink-soft">
+          Derive what you can
+        </p>
+        <p className="text-xs font-bold text-ink-soft">
+          {reached.length} of {question.candidates.length} reached
+        </p>
+      </div>
+
+      <div className="mt-2 flex flex-wrap gap-1.5">
+        {question.candidates.map((clause, index) => {
+          const got = reached.includes(index)
+          const shouldHave = locked && expected.has(index)
+          return (
+            <span
+              key={index}
+              className={`tile flex items-center gap-1.5 px-2.5 py-1
+                ${
+                  locked
+                    ? got
+                      ? 'bg-grass text-white'
+                      : shouldHave
+                        ? 'bg-space-red text-white'
+                        : 'bg-card-shade'
+                    : got
+                      ? 'bg-grass text-white'
+                      : 'bg-card-shade'
+                }`}
+            >
+              <span className="text-xs font-bold" aria-hidden>
+                {got ? '✓' : locked && shouldHave ? '✗' : '·'}
+              </span>
+              <ClauseText
+                clause={clause}
+                className={`text-sm font-bold ${got || shouldHave ? 'text-white' : ''}`}
+              />
+            </span>
+          )
+        })}
+      </div>
+
+      <p className="mt-2 text-xs font-medium text-ink-soft">
+        Tap two clauses to resolve them. Anything you build stays on the bench and can be resolved
+        again.
       </p>
 
-      <div className="mt-2 flex flex-col gap-3">
-        {groups.map((group, groupIndex) => (
-          <div key={groupIndex} className="flex flex-col gap-1.5">
-            {groups.length > 1 && (
+      <Shakeable shaking={shaking}>
+        <div className="mt-2 flex flex-col gap-3">
+          {groups.map((group, groupIndex) => (
+            <div key={groupIndex} className="flex flex-col gap-1.5">
+              {groups.length > 1 && (
+                <p className="text-xs font-bold uppercase tracking-wider text-ink-soft">
+                  Component {groupIndex + 1}
+                </p>
+              )}
+              {group.map((clause) => benchTile(normaliseClause(clause)))}
+            </div>
+          ))}
+
+          {derived.length > 0 && (
+            <div className="flex flex-col gap-1.5">
               <p className="text-xs font-bold uppercase tracking-wider text-ink-soft">
-                Component {groupIndex + 1}
+                Derived ({derived.length})
               </p>
-            )}
-            {group.map((clause, index) => (
-              <div key={index} className="rounded-xl bg-card-shade px-3 py-1.5">
-                <ClauseText clause={clause} className="text-base font-bold" />
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
+              <MovingList className="flex flex-col gap-1.5">{derived.map(benchTile)}</MovingList>
+            </div>
+          )}
+        </div>
+      </Shakeable>
 
       {groups.length > 1 && (
         <p className="mt-2 text-xs font-medium text-ink-soft">
@@ -318,50 +474,42 @@ function Screen({ question, submit, locked, solution }: MinigameScreenProps<Deri
         </p>
       )}
 
-      <div className="mt-3 flex flex-col gap-1.5">
-        {question.candidates.map((clause, index) => {
-          const isPicked = picked.includes(index)
-          const shouldBe = locked && expected.has(index)
-          const wrongPick = locked && isPicked && !expected.has(index)
-
-          return (
-            <button
-              key={index}
-              type="button"
-              disabled={locked}
-              onClick={() => toggle(index)}
-              className={`tile flex items-center gap-2 px-3 py-2 text-left
-                ${
-                  locked
-                    ? shouldBe
-                      ? 'bg-grass text-white'
-                      : wrongPick
-                        ? 'bg-space-red text-white'
-                        : 'bg-card-shade'
-                    : isPicked
-                      ? 'bg-space-blue text-white'
-                      : 'bg-card'
-                }`}
-            >
-              <span
-                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-md border-3 border-ink text-sm font-bold
-                  ${isPicked || shouldBe ? 'bg-white text-ink' : 'bg-white/60'}`}
-                aria-hidden
+      {pivots !== null && !locked && (
+        <Pop className="tile mt-3 bg-coin p-3">
+          <p className="text-sm font-bold">
+            They clash on {pivots.options.length} variables — pick the one to cancel.
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {pivots.options.map((pivot) => (
+              <Button
+                key={pivot}
+                variant="secondary"
+                onClick={() => {
+                  resolve(pivots.a, pivots.b, pivot)
+                  setPivots(null)
+                }}
               >
-                {isPicked || shouldBe ? '✓' : ''}
-              </span>
-              <ClauseText
-                clause={clause}
-                className={`text-base font-bold ${locked && (shouldBe || wrongPick) ? 'text-white' : ''}`}
-              />
-            </button>
-          )
-        })}
-      </div>
+                {pivot}
+              </Button>
+            ))}
+            <Button variant="ghost" onClick={() => setPivots(null)}>
+              Cancel
+            </Button>
+          </div>
+        </Pop>
+      )}
+
+      {note !== null && !locked && (
+        <p className="mt-2 rounded-xl bg-card-shade px-3 py-1.5 text-xs font-semibold text-ink-soft">
+          {note}
+        </p>
+      )}
 
       {!locked ? (
-        <Button variant="coin" className="mt-4 w-full" onClick={() => submit(picked)}>
-          {picked.length === 0 ? 'None of them' : `Check ${picked.length} selected`}
+        <Button variant="coin" className="mt-3 w-full" onClick={() => submit(reached)}>
+          {reached.length === 0
+            ? 'None of them are reachable'
+            : `Hand in ${reached.length} derived`}
         </Button>
       ) : (
         <p className="mt-3 text-xs font-medium text-ink-soft">

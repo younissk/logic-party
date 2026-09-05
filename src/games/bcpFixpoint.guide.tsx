@@ -111,16 +111,21 @@ export function BcpFixpointGuide() {
         <Card>
           <Prose>
             <ul className="flex list-disc flex-col gap-2 pl-5">
-              <li>Pick the clause set BCP leaves at fixpoint. One tap.</li>
               <li>
-                All three outcomes come up about equally often, so the empty formula and the empty
-                clause are both real answers.
+                <strong>You run it.</strong> Tap a unit clause: the clauses containing it leave, and
+                its complement is struck out of the rest. Then again.
               </li>
               <li>
-                Every question needs at least two propagations, so the second one is never optional.
+                You may stop whenever you like, and that is the point — stopping with a unit clause
+                still on the table is the mistake the words "until fixpoint" exist to rule out.
               </li>
               <li>
-                After you answer, the whole run is shown one unit at a time.
+                A conflict ends the run whatever else is on the table: once the empty clause is
+                there, nothing further propagation could say would change the answer.
+              </li>
+              <li>
+                Order does not matter. The notes prove the fixpoint is the same whichever unit you
+                take first, so the game does not care either.
               </li>
             </ul>
           </Prose>

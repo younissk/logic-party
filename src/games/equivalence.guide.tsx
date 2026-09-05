@@ -139,21 +139,19 @@ export function EquivalenceGuide() {
           <Prose>
             <ul className="flex list-disc flex-col gap-2 pl-5">
               <li>
-                One tap. The middle option says “satisfiability equivalent <strong>only</strong>”,
-                and the “only” is doing real work — an equivalent pair is also satisfiability
-                equivalent, so it is never the answer for one.
+                One board, both formulas, one assignment. Answer three questions with rows: does φ
+                have a model, does ψ, and is there a row where they disagree.
               </li>
               <li>
-                Roughly a third of pairs land in each box, so no option is a safe default.
+                You never name the relationship. No separator means the model sets are identical,
+                which is equivalence; a separator plus two models means satisfiability equivalent
+                only; a separator plus one model means neither.
               </li>
               <li>
-                A good number of the <em>equivalent</em> pairs are two unsatisfiable formulas that
-                look nothing alike. Check satisfiability before you start comparing shapes.
+                A good number of the equivalent pairs are two unsatisfiable formulas that look
+                nothing alike — both "has none" and no separator, which is exactly equivalence.
               </li>
-              <li>
-                After you answer, the evidence is shown in the terms the definitions use: the
-                assignment that separates them, or the fact that nothing does.
-              </li>
+              <li>Credit is per claim, so getting two of the three right still scores.</li>
             </ul>
           </Prose>
         </Card>

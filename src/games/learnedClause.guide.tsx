@@ -100,16 +100,17 @@ export function LearnedClauseGuide() {
           <Prose>
             <ul className="flex list-disc flex-col gap-2 pl-5">
               <li>
-                Decisions are shown as gold circles, propagations as white boxes — the same notation
-                as the decision trees.
+                <strong>Build the clause.</strong> Tap an assignment to forbid it, and what lands in
+                the clause is its negation — doing that conversion yourself is where the marks are.
               </li>
               <li>
-                Every question has at least one decision <em>and</em> at least one propagation, so
-                telling them apart is always what is being asked.
+                Decisions are gold circles, propagations white boxes. Both are tappable, and adding
+                a propagated one is the mistake the game exists to catch: it makes the clause longer
+                and therefore weaker.
               </li>
               <li>
-                The wrong answers are the four specific slips: un-negated, propagations included,
-                only the last decision, everything assigned.
+                Every question has at least one decision and at least one propagation, so telling
+                them apart is always what is being asked.
               </li>
             </ul>
           </Prose>

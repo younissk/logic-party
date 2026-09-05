@@ -105,16 +105,21 @@ export function ConflictClauseGuide() {
           <Prose>
             <ul className="flex list-disc flex-col gap-2 pl-5">
               <li>
-                One leaf is highlighted and its assignment is spelled out. Pick the input clause
-                that is false there.
+                <strong>Every</strong> leaf, not one. Tapping a clause colours its literals against
+                that leaf's assignment — red for false, blue for true — so this is reading rather
+                than guessing. The conflict clause is the one that is all red.
               </li>
               <li>
-                Only leaves with exactly one falsified clause are ever asked about, so there is
-                always a single right answer.
+                Answering a leaf moves you to the next unanswered one, so the whole conversion
+                flows.
               </li>
               <li>
-                Every question is an unsatisfiable set whose tree really does mirror into a
-                refutation — the feedback tells you how many steps it takes.
+                Every leaf has exactly one falsified clause, so there is always a single right
+                reading.
+              </li>
+              <li>
+                Get them all and the tree folds into its refutation in front of you — the point of
+                the exercise, rather than a fact about it.
               </li>
             </ul>
           </Prose>

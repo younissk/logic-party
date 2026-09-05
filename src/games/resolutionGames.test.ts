@@ -7,6 +7,7 @@ import {
   format,
   isDerivable,
   isSatisfiable,
+  allResolvents,
   isTautologicalClause,
   makeRng,
   parse,
@@ -98,16 +99,24 @@ describe('equivalence', () => {
 describe('resolvents', () => {
   const sample = (d: Difficulty, n: number) => draw<ResolventsQuestion>(resolventsGame, 'resolventsGame', d, n)
 
-  it.each(DIFFICULTIES)('marks the reference answer correct on %s', (difficulty) => {
+  it.each(DIFFICULTIES)('marks the reference set correct on %s', (difficulty) => {
     for (const question of sample(difficulty, 120)) {
       expect(resolventsGame.check(question, resolventsGame.solve(question)).correct).toBe(true)
     }
   })
 
-  it.each(DIFFICULTIES)('every ticked candidate really is a one-step resolvent on %s', (difficulty) => {
+  it.each(DIFFICULTIES)('the reference set is exactly the one-step resolvents on %s', (difficulty) => {
     for (const question of sample(difficulty, 120)) {
-      for (const index of question.correct) {
-        const target = question.candidates[index] as Clause
+      const reachable = new Set(
+        allResolvents(question.clauses).map((step) => clauseKey(step.resolvent)),
+      )
+      expect(new Set(question.resolvents.map(clauseKey))).toEqual(reachable)
+    }
+  })
+
+  it.each(DIFFICULTIES)('every resolvent really comes from one pair and one pivot on %s', (difficulty) => {
+    for (const question of sample(difficulty, 120)) {
+      for (const target of question.resolvents) {
         const reachable = question.clauses.some((left, i) =>
           question.clauses.some((right, j) => {
             if (j <= i) return false
@@ -122,45 +131,38 @@ describe('resolvents', () => {
     }
   })
 
-  it.each(DIFFICULTIES)('no distractor is secretly a resolvent on %s', (difficulty) => {
-    for (const question of sample(difficulty, 120)) {
-      const wrong = question.candidates
-        .map((clause, index) => ({ clause, index }))
-        .filter(({ index }) => !question.correct.includes(index))
-      for (const { clause } of wrong) {
-        const reachable = question.clauses.some((left, i) =>
-          question.clauses.some((right, j) => {
-            if (j <= i) return false
-            return sharedVariables(left, right).some((pivot) => {
-              const resolvent = resolveOn(left, right, pivot)
-              return resolvent !== null && clauseKey(resolvent) === clauseKey(clause)
-            })
-          }),
-        )
-        expect(reachable, showClauseSet([clause])).toBe(false)
-      }
-    }
-  })
-
   it.each(DIFFICULTIES)('always includes a tautological resolvent on %s', (difficulty) => {
     // That is the lesson: cancel one pivot, the other clash survives.
     for (const question of sample(difficulty, 120)) {
-      expect(
-        question.correct.some((index) => isTautologicalClause(question.candidates[index] as Clause)),
-        showClauseSet(question.clauses),
-      ).toBe(true)
+      expect(question.resolvents.some(isTautologicalClause), showClauseSet(question.clauses)).toBe(true)
     }
   })
 
-  it('never reveals which ones in the retry message', () => {
-    const messages = new Set<string>()
+  it.each(DIFFICULTIES)('rejects a tray that is one short on %s', (difficulty) => {
+    for (const question of sample(difficulty, 120)) {
+      const short = resolventsGame.solve(question).slice(0, -1)
+      const verdict = resolventsGame.check(question, short)
+      expect(verdict.correct).toBe(false)
+      expect(verdict.message).toBe('1 still to find')
+    }
+  })
+
+  it('accepts the resolvents in any order', () => {
+    const rng = makeRng('tray')
+    for (const question of sample('medium', 60)) {
+      expect(resolventsGame.check(question, rng.shuffle(question.resolvents)).correct).toBe(true)
+    }
+  })
+
+  it('never says which ones are missing', () => {
+    // Sprint shows `message` before the retry; naming them would hand the
+    // question over.
     for (const difficulty of DIFFICULTIES) {
       for (const question of sample(difficulty, 60)) {
-        messages.add(resolventsGame.check(question, []).message)
+        const message = resolventsGame.check(question, []).message
+        expect(message).toMatch(/^\d+ still to find$/)
       }
     }
-    // Only the counts vary, never the identities.
-    expect([...messages].every((message) => /^\d+ resolvent/.test(message))).toBe(true)
   })
 })
 

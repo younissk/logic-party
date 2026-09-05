@@ -92,16 +92,22 @@ export function DpEliminateGuide() {
         <Card>
           <Prose>
             <ul className="flex list-disc flex-col gap-2 pl-5">
-              <li>One variable per question. Pick the clause set that eliminating it leaves.</li>
               <li>
-                Every question drops at least one tautological resolvent, because that is the step
-                people skip.
+                Tap a variable and watch it go: the clauses mentioning it leave, the resolvents
+                arrive, and the tautologies among them are counted out as they are dropped.
               </li>
               <li>
-                The wrong answers are the three specific slips: tautologies kept, originals not
-                deleted, resolvents never added.
+                Keep going to the end. DP finishes at the empty formula or at the empty clause and
+                nowhere else, so stopping in the middle is not an answer.
               </li>
-              <li>After you answer, the counts are shown — deleted, resolved, dropped, kept.</li>
+              <li>
+                Any order works — DP does not have one, so the game does not impose one. A variable
+                that another elimination already took with it is simply skipped.
+              </li>
+              <li>
+                Every question drops at least one tautological resolvent somewhere, because that is
+                the step people skip.
+              </li>
             </ul>
           </Prose>
         </Card>
