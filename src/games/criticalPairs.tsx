@@ -18,6 +18,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   applySubstitution,
+  canonicalVariables,
   criticalPairs,
   isVar,
   mgu,
@@ -108,7 +109,10 @@ export function overlap(
     applySubstitution(sigma, innerRight),
   )
   if (termsEqual(left, right)) return null
-  return { left, right }
+  // Renamed to x, y, z: the primed names came from renaming the two rules
+  // apart and carry no information, and leaving them in would make the tray
+  // and the answer list print the same pair differently.
+  return canonicalVariables({ left, right })
 }
 
 // ---------------------------------------------------------------------------
