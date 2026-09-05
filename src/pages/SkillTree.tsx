@@ -167,7 +167,7 @@ export function SkillTree() {
                 strokeDasharray={node.state === 'unbuilt' ? '5 4' : undefined}
               />
               <text x={9} y={20} fontSize={13}>
-                {game?.icon ?? (node.state === 'locked' ? '🔒' : '·')}
+                {game?.icon ?? '·'}
               </text>
               <text x={30} y={19} fontSize={11} fontWeight={700} fill={STATE_TEXT[node.state]}>
                 {node.item.n === undefined ? 'warm-up' : `#${node.item.n}`}
@@ -234,14 +234,14 @@ export function SkillTree() {
         </span>
         <h1 className="shout mt-2 text-3xl text-white">Skill Tree</h1>
         <p className="mt-1 text-sm font-semibold text-ink">
-          What you can do now, and what it opens next.
+          The order the plan suggests, and what each one opens. Nothing is locked.
         </p>
       </header>
 
       <div className="grid grid-cols-3 gap-2">
         <Tally value={totals.cleared} label="cleared" className="bg-grass text-white" />
         <Tally value={totals.available} label="open" className="bg-coin" />
-        <Tally value={totals.locked + totals.unbuilt} label="shut" className="bg-card" />
+        <Tally value={totals.locked} label="later" className="bg-card" />
       </div>
 
       <div className="grid grid-cols-2 gap-2">
@@ -362,7 +362,7 @@ function Detail({ node, external }: { node: SkillNode; external: string[] }) {
             ${node.state === 'cleared' ? 'bg-grass' : node.state === 'available' ? 'bg-coin' : 'bg-card-shade'}`}
           aria-hidden
         >
-          {game?.icon ?? (node.state === 'locked' ? '🔒' : '·')}
+          {game?.icon ?? '·'}
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold text-ink-soft">
@@ -376,8 +376,9 @@ function Detail({ node, external }: { node: SkillNode; external: string[] }) {
       {node.state === 'locked' && (
         <div className="mt-3 rounded-xl bg-card-shade px-3 py-2 text-sm font-medium">
           <p>
-            <strong>Needs</strong>{' '}
-            {node.blockedBy.map((item) => item.title.split(' — ')[0]).join(', ')}
+            <strong>The plan puts these first</strong>{' '}
+            {node.blockedBy.map((item) => item.title.split(' — ')[0]).join(', ')} — a suggested
+            order, not a gate.
           </p>
           {node.item.why !== undefined && <p className="mt-1 text-ink-soft">{node.item.why}</p>}
         </div>
@@ -410,7 +411,7 @@ function Detail({ node, external }: { node: SkillNode; external: string[] }) {
         </p>
       )}
 
-      {game !== undefined && node.state !== 'locked' && (
+      {game !== undefined && (
         <div className="mt-3 flex gap-2">
           <Link to={`/play/${game.id}`} className="flex-1">
             <Button variant="coin" className="w-full">

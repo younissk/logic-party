@@ -4,13 +4,15 @@
  * minigame is only its own question screen.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Banner, Button, Card, Star } from '@/ui/primitives'
 import { Confetti } from '@/ui/Confetti'
 import { Countdown } from '@/ui/Countdown'
 import { randomSeed } from '@/logic'
 import { formatDuration, getBestTime, getHighScore, useProgress } from '@/store/progress'
+import { levelStanding, usePlayer } from '@/store/player'
+import { Avatar, LevelBar } from '@/ui/Avatar'
 import { useRound } from './useRound'
 import type { AnyMinigame, Difficulty, RoundFormat } from './types'
 
@@ -60,6 +62,8 @@ function ActiveRound({
 }: RoundScreenProps & { onReplay: () => void }) {
   const round = useRound({ game, difficulty, format, seed })
   const progress = useProgress()
+  const player = usePlayer()
+  const standing = levelStanding(player.xp)
 
   // Confetti fires on a correct answer, and much harder on a new best.
   const [burst, setBurst] = useState(0)
@@ -78,6 +82,20 @@ function ActiveRound({
     setBurstSize(160)
     setBurst((previous) => previous + 1)
   }, [isNewBest])
+
+  // A level-up is the loudest thing that can happen mid-round, so it fires its
+  // own cannon rather than sharing the correct-answer one.
+  const level = standing.level
+  const seenLevel = useRef(level)
+  useEffect(() => {
+    if (level <= seenLevel.current) {
+      seenLevel.current = level
+      return
+    }
+    seenLevel.current = level
+    setBurstSize(140)
+    setBurst((previous) => previous + 1)
+  }, [level])
 
   const isSprint = format === 'sprint'
 
@@ -149,6 +167,14 @@ function ActiveRound({
             )}
           </dl>
 
+          <div className="mt-5 flex items-center gap-3 rounded-2xl bg-card-shade p-3 text-left">
+            <Avatar style={player.style} seed={player.seed} name={player.name} size={48} />
+            <LevelBar {...standing} />
+          </div>
+          <p className="mt-2 text-sm font-bold text-grass-deep">
+            +{round.xpEarned} XP this round
+          </p>
+
           <p className="mt-4 text-xs font-semibold text-ink-soft">
             seed <code className="rounded-md bg-card-shade px-1.5 py-0.5">{seed}</code>
           </p>
@@ -180,13 +206,21 @@ function ActiveRound({
 
       <header className="flex flex-col gap-2">
         <div className="flex items-center justify-between gap-3">
-          {isSprint ? (
-            <span className="text-sm font-bold uppercase tracking-wider text-ink">
-              {Math.min(round.correctCount + 1, round.total ?? 0)} of {round.total}
+          <span className="flex items-center gap-2">
+            <span className="relative">
+              <Avatar style={player.style} seed={player.seed} name={player.name} size={36} />
+              <span className="absolute -bottom-1 -right-1 rounded-full border-2 border-ink bg-coin px-1 text-[0.6rem] font-bold tabular-nums text-ink">
+                {standing.level}
+              </span>
             </span>
-          ) : (
-            <span className="shout text-3xl text-coin tabular-nums">{round.points}</span>
-          )}
+            {isSprint ? (
+              <span className="text-sm font-bold uppercase tracking-wider text-ink">
+                {Math.min(round.correctCount + 1, round.total ?? 0)} of {round.total}
+              </span>
+            ) : (
+              <span className="shout text-3xl text-coin tabular-nums">{round.points}</span>
+            )}
+          </span>
 
           <div className="flex items-center gap-2">
             {!isSprint && round.combo >= 2 && (
@@ -264,6 +298,17 @@ function ActiveRound({
             {!isSprint && round.lastAward && round.lastAward.comboBonus > 0 && (
               <p className="text-sm font-bold">
                 includes +{round.lastAward.comboBonus} combo bonus (×{round.lastAward.combo})
+              </p>
+            )}
+
+            {round.lastAward && (
+              <p className="text-sm font-bold">
+                +{round.lastAward.xp} XP
+                {round.lastAward.leveledUp && (
+                  <span className="ml-2 rounded-full bg-white px-2 py-0.5 text-ink">
+                    ★ Level {round.lastAward.level} — {standing.title}
+                  </span>
+                )}
               </p>
             )}
 

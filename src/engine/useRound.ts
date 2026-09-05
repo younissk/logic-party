@@ -14,6 +14,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { deriveSeed, makeRng } from '@/logic'
 import { recordAttempt, submitScore, submitTime } from '@/store/progress'
+import { awardXp, xpForAnswer } from '@/store/player'
 import type { AnyMinigame, Difficulty, RoundFormat, Verdict } from './types'
 import { DEFAULT_ROUND_SECONDS, DEFAULT_SPRINT_QUESTIONS, SCORING } from './types'
 
@@ -36,6 +37,12 @@ export interface Award {
   combo: number
   /** sprint: seconds added to the finishing time. */
   penaltySeconds: number
+  /** Experience earned by this answer. Never negative — trying counts. */
+  xp: number
+  /** True when this answer pushed the player up a level. */
+  leveledUp: boolean
+  /** The level after this answer. */
+  level: number
 }
 
 export interface RoundState {
@@ -63,6 +70,8 @@ export interface RoundState {
    */
   awaitingRetry: boolean
   points: number
+  /** Experience earned across the whole round so far. */
+  xpEarned: number
   lastAward: Award | null
   combo: number
   bestCombo: number
@@ -100,6 +109,7 @@ export function useRound(options: RoundOptions): RoundState {
   const [verdict, setVerdict] = useState<Verdict | null>(null)
   const [points, setPoints] = useState(0)
   const [lastAward, setLastAward] = useState<Award | null>(null)
+  const [xpEarned, setXpEarned] = useState(0)
   const [combo, setCombo] = useState(0)
   const [bestCombo, setBestCombo] = useState(0)
   const [answered, setAnswered] = useState(0)
@@ -241,8 +251,25 @@ export function useRound(options: RoundOptions): RoundState {
       const delta = result.correct ? SCORING.correct + comboBonus : -SCORING.wrong
       const penalty = requireCorrect && !result.correct ? sprintPenalty : 0
 
+      // Experience is earned even in practice, and even when the answer was
+      // wrong: the levelling track rewards showing up, and the score is what
+      // rewards being right. Awarded before the state is set so the banner can
+      // announce a level-up in the same beat as the verdict.
+      const award = awardXp(
+        xpForAnswer({ difficulty, score: questionScore, combo: nextCombo }),
+      )
+
       setVerdict(result)
-      setLastAward({ points: delta, comboBonus, combo: nextCombo, penaltySeconds: penalty })
+      setLastAward({
+        points: delta,
+        comboBonus,
+        combo: nextCombo,
+        penaltySeconds: penalty,
+        xp: award.gained,
+        leveledUp: award.leveledUp,
+        level: award.level,
+      })
+      setXpEarned((previous) => previous + award.gained)
       setCombo(nextCombo)
       setBestCombo((previous) => Math.max(previous, nextCombo))
       setAnswered((previous) => previous + 1)
@@ -387,6 +414,7 @@ export function useRound(options: RoundOptions): RoundState {
     mistakes,
     awaitingRetry,
     points,
+    xpEarned,
     lastAward,
     combo,
     bestCombo,

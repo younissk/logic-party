@@ -3,6 +3,8 @@ import { CATEGORIES, topicsInCategory } from '@/engine/categories'
 import { minigamesInCategory, MINIGAMES } from '@/engine/registry'
 import { TOPIC_LABELS } from '@/engine/types'
 import { Card } from '@/ui/primitives'
+import { Avatar, LevelBar } from '@/ui/Avatar'
+import { levelStanding, usePlayer } from '@/store/player'
 import { Search } from '@/ui/Search'
 import { skillTree, summarise } from '@/engine/skillTree'
 import { currentStreak, overallStats, statsForTopic, useProgress, weakestTopics } from '@/store/progress'
@@ -11,6 +13,8 @@ import type { CategoryInfo } from '@/engine/categories'
 
 export function Home() {
   const progress = useProgress()
+  const player = usePlayer()
+  const standing = levelStanding(player.xp)
   const stats = overallStats(progress)
   const streak = currentStreak(progress)
   const tree = summarise(skillTree(progress))
@@ -25,6 +29,18 @@ export function Home() {
         <p className="mt-2 font-semibold text-ink">Computational logic, one minigame at a time.</p>
       </header>
 
+      <Link to="/me" className="block active:translate-y-1">
+        <Card className="bg-card hover:bg-card-shade">
+          <div className="flex items-center gap-3">
+            <Avatar style={player.style} seed={player.seed} name={player.name} size={56} />
+            <LevelBar {...standing} />
+            <span className="text-xl" aria-hidden>
+              ›
+            </span>
+          </div>
+        </Card>
+      </Link>
+
       <Search />
 
       <Link to="/tree" className="block active:translate-y-1">
@@ -36,7 +52,7 @@ export function Home() {
             <div className="min-w-0 flex-1">
               <h2 className="text-lg font-bold">Skill Tree</h2>
               <p className="text-sm font-semibold text-ink-soft">
-                {tree.cleared} cleared · {tree.available} open · {tree.locked + tree.unbuilt} still shut
+                {tree.cleared} cleared · {tree.available + tree.locked} playable · {tree.unbuilt} not built yet
               </p>
             </div>
             <span className="text-xl" aria-hidden>

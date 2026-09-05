@@ -3,6 +3,7 @@ import { Category } from '@/pages/Category'
 import { Guide } from '@/pages/Guide'
 import { Home } from '@/pages/Home'
 import { Play } from '@/pages/Play'
+import { Profile } from '@/pages/Profile'
 import { SkillTree } from '@/pages/SkillTree'
 
 function Layout() {
@@ -29,6 +30,7 @@ export const router = createBrowserRouter(
         { path: '/play/:gameId', element: <Play /> },
         { path: '/guide/:gameId', element: <Guide /> },
         { path: '/tree', element: <SkillTree /> },
+        { path: '/me', element: <Profile /> },
       ],
     },
   ],
