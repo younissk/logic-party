@@ -5,8 +5,6 @@ import { TOPIC_LABELS } from '@/engine/types'
 import { Card } from '@/ui/primitives'
 import { Search } from '@/ui/Search'
 import { skillTree, summarise } from '@/engine/skillTree'
-import { CATEGORY_BY_ID } from '@/engine/categories'
-import { allItems } from '@/engine/skillTree'
 import { currentStreak, overallStats, statsForTopic, useProgress, weakestTopics } from '@/store/progress'
 import type { ProgressState } from '@/store/progress'
 import type { CategoryInfo } from '@/engine/categories'
@@ -16,11 +14,6 @@ export function Home() {
   const stats = overallStats(progress)
   const streak = currentStreak(progress)
   const tree = summarise(skillTree(progress))
-  // The exam plan's red items, playable ones first — those are the marks
-  // actually being dropped, and they outrank everything else in the plan.
-  const priority = allItems()
-    .filter((entry) => entry.item.priority === 'lost')
-    .sort((a, b) => Number(b.item.game !== undefined) - Number(a.item.game !== undefined))
 
   const practisedTopics = MINIGAMES.flatMap((game) => game.topics)
   const weak = weakestTopics([...new Set(practisedTopics)], progress).slice(0, 3)
@@ -52,44 +45,6 @@ export function Home() {
           </div>
         </Card>
       </Link>
-
-      {priority.length > 0 && (
-        <Card>
-          <h2 className="text-sm font-bold uppercase tracking-widest text-ink-soft">
-            Where the marks go
-          </h2>
-          <p className="mt-1 text-xs font-medium text-ink-soft">
-            {priority.length} exercise types the plan flags red. {priority.filter((e) => e.item.game).length}{' '}
-            playable so far.
-          </p>
-          <ul className="mt-2 flex flex-col gap-1.5">
-            {priority.slice(0, 5).map((entry) => (
-              <li key={entry.item.id}>
-                {entry.item.game === undefined ? (
-                  <div className="rounded-xl bg-card-shade px-3 py-1.5">
-                    <p className="text-sm font-bold text-ink-soft">
-                      {entry.item.n}. {entry.item.title}
-                    </p>
-                    <p className="text-xs font-medium text-ink-soft">
-                      {CATEGORY_BY_ID[entry.category].title} · not built yet
-                    </p>
-                  </div>
-                ) : (
-                  <Link
-                    to={`/play/${entry.item.game}`}
-                    className="block rounded-xl bg-space-red px-3 py-1.5 text-white hover:brightness-110"
-                  >
-                    <p className="text-sm font-bold">
-                      {entry.item.n}. {entry.item.title}
-                    </p>
-                    <p className="text-xs font-medium opacity-85">{CATEGORY_BY_ID[entry.category].title}</p>
-                  </Link>
-                )}
-              </li>
-            ))}
-          </ul>
-        </Card>
-      )}
 
       <div className="grid grid-cols-3 gap-3">
         <Stat label="Answered" value={String(stats.attempts)} />

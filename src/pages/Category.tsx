@@ -3,7 +3,6 @@ import {
   CATEGORY_BY_ID,
   sectionProgress,
   type Category as CategoryId,
-  type Priority,
   type Section,
   type SyllabusItem,
 } from '@/engine/categories'
@@ -23,37 +22,19 @@ import {
 const isCategory = (value: string): value is CategoryId => value in CATEGORY_BY_ID
 
 /**
- * The plan's own markers, kept visible.
+ * How often the exam has asked for this, if it has asked more than once.
  *
- * A red item is one where marks were actually dropped, which outranks how
- * often it comes up — so it has to read louder than the frequency does.
+ * A fact about the course rather than about any one student, which is the
+ * test for whether something belongs here at all.
  */
-const PRIORITY_STYLE: Readonly<Record<Priority, string>> = {
-  lost: 'bg-space-red text-white',
-  refresh: 'bg-coin text-ink',
-  skim: 'bg-card-shade text-ink-soft',
-}
-
-const PRIORITY_SHORT: Readonly<Record<Priority, string>> = {
-  lost: 'lost marks',
-  refresh: 'refresh',
-  skim: 'skim',
-}
-
 function Markers({ item }: { item: SyllabusItem }) {
-  if (item.priority === undefined) return null
+  if (item.stars === undefined || item.stars === 0) return null
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <span
-        className={`rounded-full px-2 py-0.5 text-[0.65rem] font-bold uppercase tracking-wider ${PRIORITY_STYLE[item.priority]}`}
-      >
-        {PRIORITY_SHORT[item.priority]}
-      </span>
-      {item.stars !== undefined && item.stars > 0 && (
-        <span className="text-[0.65rem] font-bold text-coin-deep" title={`In ${item.stars + 1} past exams`}>
-          {'★'.repeat(item.stars)}
-        </span>
-      )}
+    <span
+      className="text-[0.65rem] font-bold text-coin-deep"
+      title={`In ${item.stars + 1} past exams`}
+    >
+      {'★'.repeat(item.stars)}
     </span>
   )
 }

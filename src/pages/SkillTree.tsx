@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { CATEGORIES, CATEGORY_BY_ID, type Category, type Priority } from '@/engine/categories'
+import { CATEGORIES, CATEGORY_BY_ID, type Category } from '@/engine/categories'
 import { getMinigame } from '@/engine/registry'
 import { COLUMN_GAP, NODE_HEIGHT, NODE_WIDTH, layoutGraph } from '@/engine/graphLayout'
 import {
@@ -16,12 +16,18 @@ import {
 import { Button, Card } from '@/ui/primitives'
 import { useProgress } from '@/store/progress'
 
-/** Fill and text per state, so the graph reads at a glance without a legend. */
+/**
+ * Fill and text per state, so the graph reads at a glance without a legend.
+ *
+ * Opaque rather than translucent: a 55%-white node sitting on the cream card
+ * comes out the same colour as an available one, which was fine over the sky
+ * behind the small graph and unreadable full screen.
+ */
 const STATE_FILL: Record<NodeState, string> = {
   cleared: 'var(--color-grass)',
   available: 'var(--color-coin)',
-  locked: 'rgba(255,253,245,0.55)',
-  unbuilt: 'rgba(255,253,245,0.4)',
+  locked: 'var(--color-card-shade)',
+  unbuilt: 'var(--color-card)',
 }
 
 const STATE_TEXT: Record<NodeState, string> = {
@@ -29,12 +35,6 @@ const STATE_TEXT: Record<NodeState, string> = {
   available: 'var(--color-ink)',
   locked: 'var(--color-ink-soft)',
   unbuilt: 'var(--color-ink-soft)',
-}
-
-const PRIORITY_DOT: Record<Priority, string> = {
-  lost: 'var(--color-space-red)',
-  refresh: 'var(--color-coin-deep)',
-  skim: 'transparent',
 }
 
 /**
@@ -53,6 +53,7 @@ export function SkillTree() {
 
   const [category, setCategory] = useState<Category>('propositional')
   const [selected, setSelected] = useState<string | null>(null)
+  const [expanded, setExpanded] = useState(false)
 
   // How many nodes fit across, measured rather than guessed: a layer with
   // seven roots is otherwise a graph three phone-screens wide, most of it
@@ -73,7 +74,25 @@ export function SkillTree() {
     const observer = new ResizeObserver(measure)
     observer.observe(element)
     return () => observer.disconnect()
-  }, [])
+    // Re-runs when the overlay opens or closes: that swaps the graph into a
+    // different part of the tree, so React mounts a *new* element and an
+    // observer bound to the old one would go on reporting the old width.
+  }, [expanded])
+
+  useEffect(() => {
+    if (!expanded) return
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setExpanded(false)
+    }
+    window.addEventListener('keydown', onKey)
+    // The page behind would otherwise scroll under the overlay on a phone.
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      document.body.style.overflow = previous
+    }
+  }, [expanded])
 
   const inCategory = useMemo(
     () => nodes.filter((node) => node.category === category),
@@ -96,6 +115,112 @@ export function SkillTree() {
 
   const byId = new Map(inCategory.map((node) => [node.item.id, node]))
   const chosen = selected === null ? null : (byId.get(selected) ?? null)
+
+  const graph = (
+    <div ref={frame} className="overflow-auto">
+      <svg
+        width={layout.width}
+        height={layout.height}
+        viewBox={`0 0 ${layout.width} ${layout.height}`}
+        role="img"
+        aria-label={`Dependency graph for ${CATEGORY_BY_ID[category].title}`}
+        className="max-w-none"
+      >
+        {layout.edges.map((edge, index) => {
+          // An S-curve rather than a straight line: several edges arriving at
+          // one node overlap into a single thick stroke when straight, and you
+          // cannot see how many prerequisites it actually has.
+          const midY = (edge.fromY + edge.toY) / 2
+          const lit = chosen !== null && (edge.to === chosen.item.id || edge.from === chosen.item.id)
+          return (
+            <path
+              key={index}
+              d={`M ${edge.fromX} ${edge.fromY} C ${edge.fromX} ${midY}, ${edge.toX} ${midY}, ${edge.toX} ${edge.toY}`}
+              fill="none"
+              stroke={lit ? 'var(--color-space-blue)' : 'var(--color-ink)'}
+              strokeWidth={lit ? 3 : 1.5}
+              strokeOpacity={lit ? 1 : chosen === null ? 0.35 : 0.15}
+            />
+          )
+        })}
+
+        {layout.nodes.map((placed) => {
+          const node = byId.get(placed.id)
+          if (node === undefined) return null
+          const game = node.item.game === undefined ? undefined : getMinigame(node.item.game)
+          const isChosen = chosen?.item.id === placed.id
+
+          return (
+            <g
+              key={placed.id}
+              transform={`translate(${placed.x}, ${placed.y})`}
+              onClick={() => setSelected(placed.id)}
+              className="cursor-pointer"
+            >
+              <rect
+                width={NODE_WIDTH}
+                height={NODE_HEIGHT}
+                rx={12}
+                fill={STATE_FILL[node.state]}
+                stroke="var(--color-ink)"
+                strokeWidth={isChosen ? 4 : 2}
+                strokeDasharray={node.state === 'unbuilt' ? '5 4' : undefined}
+              />
+              <text x={9} y={20} fontSize={13}>
+                {game?.icon ?? (node.state === 'locked' ? '🔒' : '·')}
+              </text>
+              <text x={30} y={19} fontSize={11} fontWeight={700} fill={STATE_TEXT[node.state]}>
+                {node.item.n === undefined ? 'warm-up' : `#${node.item.n}`}
+              </text>
+              {node.item.stars !== undefined && node.item.stars > 0 && (
+                <text x={NODE_WIDTH - 8} y={19} textAnchor="end" fontSize={9} fill="var(--color-coin-deep)">
+                  {'★'.repeat(node.item.stars)}
+                </text>
+              )}
+              {wrapLabel(game?.title ?? node.item.title).map((line, lineIndex) => (
+                <text
+                  key={lineIndex}
+                  x={9}
+                  y={34 + lineIndex * 11}
+                  fontSize={9.5}
+                  fontWeight={600}
+                  fill={STATE_TEXT[node.state]}
+                >
+                  {line}
+                </text>
+              ))}
+            </g>
+          )
+        })}
+      </svg>
+    </div>
+  )
+
+  if (expanded) {
+    return (
+      <div className="fixed inset-0 z-50 flex flex-col bg-card">
+        <div className="flex items-center gap-2 border-b-3 border-ink px-3 py-2">
+          <span className="formula text-lg" aria-hidden>
+            {CATEGORY_BY_ID[category].icon}
+          </span>
+          <p className="min-w-0 flex-1 truncate text-sm font-bold">
+            {CATEGORY_BY_ID[category].title}
+          </p>
+          <Button variant="secondary" className="min-h-9 px-3 text-xs" onClick={() => setExpanded(false)}>
+            ✕ Close
+          </Button>
+        </div>
+
+        <div className="min-h-0 flex-1 p-2">{graph}</div>
+
+        {chosen !== null && (
+          <div className="max-h-[45%] overflow-y-auto border-t-3 border-ink p-2">
+            <Detail node={chosen} external={external.get(chosen.item.id) ?? []} />
+          </div>
+        )}
+      </div>
+    )
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -148,85 +273,20 @@ export function SkillTree() {
       </div>
 
       <Card className="bg-card p-2">
-        <div ref={frame} className="overflow-x-auto">
-          <svg
-            width={layout.width}
-            height={layout.height}
-            viewBox={`0 0 ${layout.width} ${layout.height}`}
-            role="img"
-            aria-label={`Dependency graph for ${CATEGORY_BY_ID[category].title}`}
-            className="max-w-none"
+        <div className="mb-1 flex items-center justify-between gap-2 px-1">
+          <p className="text-[0.65rem] font-semibold text-ink-soft">
+            Tap a node. Edges run downwards, from a skill to what it opens. Stars mark what the exam
+            has asked for more than once.
+          </p>
+          <Button
+            variant="secondary"
+            className="min-h-9 shrink-0 px-3 text-xs"
+            onClick={() => setExpanded(true)}
           >
-            {layout.edges.map((edge, index) => {
-              // An S-curve rather than a straight line: several edges arriving
-              // at one node overlap into a single thick stroke when straight,
-              // and you cannot see how many prerequisites it actually has.
-              const midY = (edge.fromY + edge.toY) / 2
-              const lit = chosen !== null && (edge.to === chosen.item.id || edge.from === chosen.item.id)
-              return (
-                <path
-                  key={index}
-                  d={`M ${edge.fromX} ${edge.fromY} C ${edge.fromX} ${midY}, ${edge.toX} ${midY}, ${edge.toX} ${edge.toY}`}
-                  fill="none"
-                  stroke={lit ? 'var(--color-space-blue)' : 'var(--color-ink)'}
-                  strokeWidth={lit ? 3 : 1.5}
-                  strokeOpacity={lit ? 1 : chosen === null ? 0.35 : 0.15}
-                />
-              )
-            })}
-
-            {layout.nodes.map((placed) => {
-              const node = byId.get(placed.id)
-              if (node === undefined) return null
-              const game = node.item.game === undefined ? undefined : getMinigame(node.item.game)
-              const isChosen = chosen?.item.id === placed.id
-
-              return (
-                <g
-                  key={placed.id}
-                  transform={`translate(${placed.x}, ${placed.y})`}
-                  onClick={() => setSelected(placed.id)}
-                  className="cursor-pointer"
-                >
-                  <rect
-                    width={NODE_WIDTH}
-                    height={NODE_HEIGHT}
-                    rx={12}
-                    fill={STATE_FILL[node.state]}
-                    stroke="var(--color-ink)"
-                    strokeWidth={isChosen ? 4 : 2}
-                    strokeDasharray={node.state === 'unbuilt' ? '5 4' : undefined}
-                  />
-                  <text x={9} y={20} fontSize={13}>
-                    {game?.icon ?? (node.state === 'locked' ? '🔒' : '·')}
-                  </text>
-                  <text x={30} y={19} fontSize={11} fontWeight={700} fill={STATE_TEXT[node.state]}>
-                    {node.item.n === undefined ? 'warm-up' : `#${node.item.n}`}
-                  </text>
-                  {node.item.priority !== undefined && node.item.priority !== 'skim' && (
-                    <circle cx={NODE_WIDTH - 12} cy={14} r={4} fill={PRIORITY_DOT[node.item.priority]} />
-                  )}
-                  {wrapLabel(game?.title ?? node.item.title).map((line, lineIndex) => (
-                    <text
-                      key={lineIndex}
-                      x={9}
-                      y={34 + lineIndex * 11}
-                      fontSize={9.5}
-                      fontWeight={600}
-                      fill={STATE_TEXT[node.state]}
-                    >
-                      {line}
-                    </text>
-                  ))}
-                </g>
-              )
-            })}
-          </svg>
+            ⤢ Full screen
+          </Button>
         </div>
-        <p className="mt-1 px-1 text-[0.65rem] font-semibold text-ink-soft">
-          Tap a node. Edges run downwards, from a skill to what it opens. A red dot marks an item
-          the plan flags as lost marks.
-        </p>
+        {graph}
       </Card>
 
       {chosen === null ? (

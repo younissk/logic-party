@@ -111,13 +111,14 @@ describe('categories', () => {
     expect(numbers).toEqual(numbers.map((_, index) => index + 1))
   })
 
-  it('marks every numbered item with a priority', () => {
-    // The markers are the whole point of the plan; an item without one would
-    // quietly drop out of "what to revise first".
+  it('records nothing that is about one particular student', () => {
+    // The syllabus is course material, so it has to be usable by anyone
+    // taking the course. Anything derived from one person's own marks is not.
     for (const category of CATEGORIES) {
       for (const item of syllabusItems(category.id)) {
-        if (item.n === undefined) continue
-        expect(item.priority, `${item.id}`).toBeDefined()
+        expect(item, item.id).not.toHaveProperty('priority')
+        expect(item, item.id).not.toHaveProperty('score')
+        expect(item, item.id).not.toHaveProperty('weakness')
       }
     }
   })
