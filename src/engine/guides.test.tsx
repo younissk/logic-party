@@ -208,18 +208,19 @@ describe('categories', () => {
     expect(propositional.built).toBe(
       MINIGAMES.filter((game) => categoriesOf(game.topics).includes('propositional')).length,
     )
-    // Equational is under way: some of it is built, and the count of built
-    // items has to match the games that actually claim those topics.
+    // Equational is finished too.
     const equational = sectionProgress('equational')
-    expect(equational.built).toBeGreaterThan(0)
-    expect(equational.built).toBeLessThanOrEqual(equational.total)
+    expect(equational.built).toBe(equational.total)
 
-    // The last two are planned out and entirely unbuilt, which is exactly what
-    // the plan says about where the work is.
-    for (const category of ['first-order', 'fol-theories'] as const) {
-      expect(sectionProgress(category).built, category).toBe(0)
-      expect(sectionProgress(category).total, category).toBeGreaterThan(0)
-    }
+    // First-order is under way: some of it is built, never more than all of it.
+    const firstOrder = sectionProgress('first-order')
+    expect(firstOrder.built).toBeGreaterThan(0)
+    expect(firstOrder.built).toBeLessThanOrEqual(firstOrder.total)
+
+    // Theories is planned out and entirely unbuilt, which is exactly what the
+    // plan says about where the work is.
+    expect(sectionProgress('fol-theories').built).toBe(0)
+    expect(sectionProgress('fol-theories').total).toBeGreaterThan(0)
   })
 
   it('describes what an empty category is for', () => {

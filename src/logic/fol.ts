@@ -34,7 +34,7 @@ export type FoFormula =
   | { kind: 'true' }
   | { kind: 'false' }
   | { kind: 'atom'; predicate: string; args: Term[] }
-  | { kind: 'foNot'; body: FoFormula }
+  | { kind: 'not'; body: FoFormula }
   | { kind: 'binary'; connective: FoConnective; left: FoFormula; right: FoFormula }
   | { kind: 'quantified'; quantifier: Quantifier; variable: string; body: FoFormula }
 
@@ -43,7 +43,7 @@ export const atom = (predicate: string, args: Term[] = []): FoFormula => ({
   predicate,
   args,
 })
-export const foNot = (body: FoFormula): FoFormula => ({ kind: 'foNot', body })
+export const foNot = (body: FoFormula): FoFormula => ({ kind: 'not', body })
 export const binary = (connective: FoConnective, left: FoFormula, right: FoFormula): FoFormula => ({
   kind: 'binary',
   connective,
@@ -99,7 +99,7 @@ export function showFormula(formula: FoFormula): string {
       return formula.args.length === 0
         ? formula.predicate
         : `${formula.predicate}(${formula.args.map(showTerm).join(',')})`
-    case 'foNot':
+    case 'not':
       return `¬${showFormula(formula.body)}`
     case 'binary':
       return `(${showFormula(formula.left)}${CONNECTIVE_SYMBOL[formula.connective]}${showFormula(formula.right)})`
@@ -122,7 +122,7 @@ export function formulasEqual(left: FoFormula, right: FoFormula): boolean {
         left.args.every((arg, index) => termsEqual(arg, other.args[index] as Term))
       )
     }
-    case 'foNot':
+    case 'not':
       return formulasEqual(left.body, (right as typeof left).body)
     case 'binary': {
       const other = right as typeof left
@@ -150,7 +150,7 @@ export function formulasEqual(left: FoFormula, right: FoFormula): boolean {
 /** Every subformula, root first. */
 export function foSubformulas(formula: FoFormula): FoFormula[] {
   const found: FoFormula[] = [formula]
-  if (formula.kind === 'foNot') found.push(...foSubformulas(formula.body))
+  if (formula.kind === 'not') found.push(...foSubformulas(formula.body))
   if (formula.kind === 'binary') {
     found.push(...foSubformulas(formula.left), ...foSubformulas(formula.right))
   }
@@ -162,7 +162,7 @@ export const isAtom = (formula: FoFormula): boolean => formula.kind === 'atom'
 
 /** An atom or a negated atom — Exercise 7's vocabulary question. */
 export const isLiteralFormula = (formula: FoFormula): boolean =>
-  formula.kind === 'atom' || (formula.kind === 'foNot' && formula.body.kind === 'atom')
+  formula.kind === 'atom' || (formula.kind === 'not' && formula.body.kind === 'atom')
 
 /** An atom whose arguments are all ground. */
 export const isGroundAtom = (formula: FoFormula): boolean =>
@@ -178,7 +178,7 @@ export function freeVariables(formula: FoFormula, bound: readonly string[] = [])
       return [
         ...new Set(formula.args.flatMap(termVariables).filter((name) => !bound.includes(name))),
       ]
-    case 'foNot':
+    case 'not':
       return freeVariables(formula.body, bound)
     case 'binary':
       return [
@@ -202,7 +202,7 @@ export function boundVariables(formula: FoFormula): string[] {
           if (bound.includes(name)) found.add(name)
         }
         return
-      case 'foNot':
+      case 'not':
         walk(node.body, bound)
         return
       case 'binary':
@@ -241,7 +241,7 @@ export function isClean(formula: FoFormula): boolean {
       walk(node.body)
       return
     }
-    if (node.kind === 'foNot') walk(node.body)
+    if (node.kind === 'not') walk(node.body)
     if (node.kind === 'binary') {
       walk(node.left)
       walk(node.right)
@@ -264,7 +264,7 @@ export function substituteFormula(sigma: Substitution, formula: FoFormula): FoFo
         formula.predicate,
         formula.args.map((arg) => applySubstitution(sigma, arg)),
       )
-    case 'foNot':
+    case 'not':
       return foNot(substituteFormula(sigma, formula.body))
     case 'binary':
       return binary(
@@ -336,7 +336,7 @@ export function clean(formula: FoFormula): FoFormula {
   const seen = new Set<string>()
   const walk = (node: FoFormula): FoFormula => {
     switch (node.kind) {
-      case 'foNot':
+      case 'not':
         return foNot(walk(node.body))
       case 'binary':
         return binary(node.connective, walk(node.left), walk(node.right))

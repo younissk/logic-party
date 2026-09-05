@@ -32,6 +32,11 @@ export type Topic =
   | 'unification'
   | 'equational-theory'
   | 'rewriting'
+  | 'fo-syntax'
+  | 'fo-normal-forms'
+  | 'herbrand'
+  | 'fo-resolution'
+  | 'fo-equality'
 
 export const TOPIC_LABELS: Readonly<Record<Topic, string>> = {
   syntax: 'Syntax & parsing',
@@ -46,6 +51,11 @@ export const TOPIC_LABELS: Readonly<Record<Topic, string>> = {
   unification: 'Substitution & unification',
   'equational-theory': 'Equational theories',
   rewriting: 'Rewriting & completion',
+  'fo-syntax': 'FO syntax & semantics',
+  'fo-normal-forms': 'Prenex & Skolem',
+  herbrand: 'Herbrand',
+  'fo-resolution': 'FO resolution',
+  'fo-equality': 'Equality',
 }
 
 export interface Verdict {

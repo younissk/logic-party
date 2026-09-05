@@ -83,7 +83,7 @@ export function evaluateFormula(structure: Structure, env: Env, formula: FoFormu
       }
       return value
     }
-    case 'foNot':
+    case 'not':
       return !evaluateFormula(structure, env, formula.body)
     case 'binary': {
       const left = evaluateFormula(structure, env, formula.left)

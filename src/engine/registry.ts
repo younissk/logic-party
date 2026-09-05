@@ -36,6 +36,9 @@ import { theoryChainGame } from '@/games/theoryChain'
 import { normalFormHuntGame } from '@/games/normalFormHunt'
 import { criticalPairsGame } from '@/games/criticalPairs'
 import { completionGame } from '@/games/completion'
+import { boundFreeGame } from '@/games/boundFree'
+import { foEvaluateGame } from '@/games/foEvaluate'
+import { wellFormedGame } from '@/games/wellFormed'
 import { pairRenamingGame } from '@/games/pairRenaming'
 import { orientGame } from '@/games/orientRules'
 import { reduceGame } from '@/games/reduceTerm'
@@ -94,6 +97,9 @@ export const MINIGAMES: readonly AnyMinigame[] = [
   criticalPairsGame,
   pairRenamingGame,
   completionGame,
+  wellFormedGame,
+  boundFreeGame,
+  foEvaluateGame,
 ]
 
 export function getMinigame(id: string): AnyMinigame | undefined {

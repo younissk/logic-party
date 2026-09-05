@@ -40,7 +40,7 @@ export const isQuantifierFree = (formula: FoFormula): boolean => {
   switch (formula.kind) {
     case 'quantified':
       return false
-    case 'foNot':
+    case 'not':
       return isQuantifierFree(formula.body)
     case 'binary':
       return isQuantifierFree(formula.left) && isQuantifierFree(formula.right)
@@ -129,7 +129,7 @@ export function pnfOptions(formula: FoFormula): PnfMove[] {
   const moves: PnfMove[] = [...topLevelMoves(formula)]
 
   const rebuild = (replacement: FoFormula, at: 'body' | 'left' | 'right'): FoFormula => {
-    if (formula.kind === 'foNot') return foNot(replacement)
+    if (formula.kind === 'not') return foNot(replacement)
     if (formula.kind === 'quantified') {
       return {
         kind: 'quantified',
@@ -146,7 +146,7 @@ export function pnfOptions(formula: FoFormula): PnfMove[] {
     return replacement
   }
 
-  if (formula.kind === 'foNot' || formula.kind === 'quantified') {
+  if (formula.kind === 'not' || formula.kind === 'quantified') {
     for (const move of pnfOptions(formula.body)) {
       moves.push({ rule: move.rule, result: rebuild(move.result, 'body') })
     }
@@ -184,7 +184,7 @@ function topLevelMoves(formula: FoFormula): PnfMove[] {
     ]
   }
 
-  if (formula.kind === 'foNot' && formula.body.kind === 'quantified') {
+  if (formula.kind === 'not' && formula.body.kind === 'quantified') {
     const inner = formula.body
     return [
       {
@@ -340,7 +340,7 @@ export function toSkolemNormalForm(formula: FoFormula): {
 /** Remove → and ↔ in favour of ¬, ∧, ∨. */
 export function removeImplications(formula: FoFormula): FoFormula {
   switch (formula.kind) {
-    case 'foNot':
+    case 'not':
       return foNot(removeImplications(formula.body))
     case 'quantified':
       return {
@@ -377,7 +377,7 @@ export function toNegationNormalForm(formula: FoFormula): FoFormula {
         return negated ? { kind: 'true' } : node
       case 'atom':
         return negated ? foNot(node) : node
-      case 'foNot':
+      case 'not':
         return walk(node.body, !negated)
       case 'binary': {
         const connective: FoConnective = negated
@@ -522,7 +522,7 @@ export function clausesOfMatrix(matrix: FoFormula): FoClause[] {
         clause.push({ negated: false, predicate: disjunct.predicate, args: disjunct.args })
         continue
       }
-      if (disjunct.kind === 'foNot' && disjunct.body.kind === 'atom') {
+      if (disjunct.kind === 'not' && disjunct.body.kind === 'atom') {
         clause.push({ negated: true, predicate: disjunct.body.predicate, args: disjunct.body.args })
         continue
       }

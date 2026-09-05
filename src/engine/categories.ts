@@ -530,12 +530,14 @@ const FIRST_ORDER_SECTIONS: Section[] = [
         n: 39,
         title: 'Signature, arity, well-formed formulas',
         source: 'ln §4.1',
+        game: 'signature',
       },
       {
         id: 'fo-vocabulary',
         n: 40,
         title: 'Atom, ground atom, literal, bound, free, clean, closed',
         source: 'Exercise 7 · fo1',
+        game: 'fo-vocabulary',
         requires: ['signature'],
         why: 'Every one of those words is defined against a signature.',
       },
@@ -544,6 +546,7 @@ const FIRST_ORDER_SECTIONS: Section[] = [
         n: 41,
         title: 'Evaluate a formula under a finite interpretation',
         source: 'ln §4.1 · exam26a Q4.2',
+        game: 'fo-evaluate',
         requires: ['fo-vocabulary'],
         why: 'You need free and bound straight before an interpretation means anything.',
       },
@@ -962,6 +965,11 @@ export const TOPIC_CATEGORY: Readonly<Record<Topic, Category>> = {
   unification: 'equational',
   'equational-theory': 'equational',
   rewriting: 'equational',
+  'fo-syntax': 'first-order',
+  'fo-normal-forms': 'first-order',
+  herbrand: 'first-order',
+  'fo-resolution': 'first-order',
+  'fo-equality': 'first-order',
 }
 
 export function topicsInCategory(category: Category): Topic[] {
