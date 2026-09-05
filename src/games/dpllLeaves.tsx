@@ -15,6 +15,8 @@ import { useEffect, useState } from 'react'
 import type { Clause } from '@/logic'
 import {
   clauseKey,
+  clauseSetToFormula,
+  isSatisfiable,
   countLeaves,
   dpll,
   isTautologicalClause,
@@ -66,6 +68,11 @@ function generate({ rng, difficulty }: GenerateContext): DpllQuestion {
       clauses.push(clause)
     }
     if (clauses.length !== count) continue
+
+    // Cheap check first: building the whole decision tree to discover the
+    // formula was satisfiable is the expensive way to find that out, and most
+    // random clause sets are.
+    if (isSatisfiable(clauseSetToFormula(clauses))) continue
 
     const tree = dpll(clauses)
     // Unsatisfiable only. Algorithm 2.42 returns the moment a branch succeeds,

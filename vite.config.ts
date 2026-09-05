@@ -23,5 +23,15 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['src/**/*.test.{ts,tsx}'],
+    /**
+     * Vitest defaults to 5 seconds, which suits a component test and not
+     * these: the game suites generate hundreds of questions by rejection
+     * sampling, and several need an unsatisfiable clause set, which is found
+     * by drawing until one turns up. On an idle machine the whole suite runs
+     * in about four seconds; on a busy one a single case can pass five, and
+     * the failure then reads as four broken tests rather than one loaded CPU.
+     * Raised so the timeout catches a genuine hang and nothing else.
+     */
+    testTimeout: 30_000,
   },
 })
