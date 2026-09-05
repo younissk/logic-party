@@ -75,6 +75,9 @@ import { natPlusGame } from '@/games/natPlus'
 import { natTimesGame } from '@/games/natTimes'
 import { tarskiGame } from '@/games/tarski'
 import { natVsRealGame } from '@/games/natVsReal'
+import { propertyGridGame } from '@/games/propertyGrid'
+import { nameTheLogicianGame } from '@/games/nameTheLogician'
+import { pureMeansBlockedGame } from '@/games/pureMeansBlocked'
 import { interpretationGame } from '@/games/interpretationGame'
 import { termBuildGame } from '@/games/termBuild'
 import { termFlatGame } from '@/games/termFlat'
@@ -162,6 +165,9 @@ export const MINIGAMES: readonly AnyMinigame[] = [
   natTimesGame,
   tarskiGame,
   natVsRealGame,
+  propertyGridGame,
+  nameTheLogicianGame,
+  pureMeansBlockedGame,
 ]
 
 export function getMinigame(id: string): AnyMinigame | undefined {

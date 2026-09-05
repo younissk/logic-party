@@ -768,6 +768,7 @@ const THEORIES_SECTIONS: Section[] = [
       {
         id: 'qe-basics',
         n: 61,
+        game: 'qe-basics',
         title: 'What QE is; it does not imply decidability',
         source: 'Def. 5.4',
         requires: ['theory-properties'],
@@ -909,12 +910,14 @@ const THEORIES_SECTIONS: Section[] = [
       {
         id: 'portrait',
         n: 74,
+        game: 'portrait',
         title: 'Portrait ID — the only pictured figure in the course',
         source: 'exam26a bonus · theories2',
       },
       {
         id: 'short-proof',
         n: 75,
+        game: 'short-proof',
         title: 'Short proof — e.g. a pure literal gives a blocked clause',
         source: 'exam26bA bonus',
         requires: ['bce'],

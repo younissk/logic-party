@@ -216,10 +216,9 @@ describe('categories', () => {
     const firstOrder = sectionProgress('first-order')
     expect(firstOrder.built).toBe(firstOrder.total)
 
-    // Theories is under way: some of it is built, never more than all of it.
+    // And theories, which finishes the syllabus.
     const theories = sectionProgress('fol-theories')
-    expect(theories.built).toBeGreaterThan(0)
-    expect(theories.built).toBeLessThanOrEqual(theories.total)
+    expect(theories.built).toBe(theories.total)
   })
 
   it('describes what an empty category is for', () => {
