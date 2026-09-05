@@ -212,15 +212,14 @@ describe('categories', () => {
     const equational = sectionProgress('equational')
     expect(equational.built).toBe(equational.total)
 
-    // First-order is under way: some of it is built, never more than all of it.
+    // First-order is finished too.
     const firstOrder = sectionProgress('first-order')
-    expect(firstOrder.built).toBeGreaterThan(0)
-    expect(firstOrder.built).toBeLessThanOrEqual(firstOrder.total)
+    expect(firstOrder.built).toBe(firstOrder.total)
 
-    // Theories is planned out and entirely unbuilt, which is exactly what the
-    // plan says about where the work is.
-    expect(sectionProgress('fol-theories').built).toBe(0)
-    expect(sectionProgress('fol-theories').total).toBeGreaterThan(0)
+    // Theories is under way: some of it is built, never more than all of it.
+    const theories = sectionProgress('fol-theories')
+    expect(theories.built).toBeGreaterThan(0)
+    expect(theories.built).toBeLessThanOrEqual(theories.total)
   })
 
   it('describes what an empty category is for', () => {

@@ -522,12 +522,14 @@ export function parseFormula(source: string, signature: FoSignature): FoFormula 
 
   const name = (): string => {
     const start = index
-    // `=` is a predicate symbol like any other in this course's syntax, and it
-    // is the one whose name is not a letter — §4.4 adds it to the signature
-    // rather than to the grammar.
-    if (text[index] === '=') {
+    // `=` and `<` are predicate symbols like any other in this course's
+    // syntax, and they are the ones whose names are not letters — §4.4 adds
+    // equality to the signature rather than to the grammar, and §5.1 does the
+    // same for the order of a dense linear order.
+    const symbolic = text[index]
+    if (symbolic === '=' || symbolic === '<') {
       index++
-      return '='
+      return symbolic
     }
     if (!/[A-Za-z_]/.test(text[index] ?? '')) fail('Expected a symbol')
     index++

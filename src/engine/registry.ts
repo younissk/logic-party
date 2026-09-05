@@ -58,6 +58,8 @@ import { orientGame } from '@/games/orientRules'
 import { reduceGame } from '@/games/reduceTerm'
 import { theoryDecideGame } from '@/games/theoryDecide'
 import { unifiableSortGame } from '@/games/unifiableSort'
+import { gatePolynomialsGame } from '@/games/gatePolynomials'
+import { circuitVerifyGame } from '@/games/circuitVerify'
 import { interpretationGame } from '@/games/interpretationGame'
 import { termBuildGame } from '@/games/termBuild'
 import { termFlatGame } from '@/games/termFlat'
@@ -128,6 +130,8 @@ export const MINIGAMES: readonly AnyMinigame[] = [
   paramodulationGame,
   equalityAxiomsGame,
   liftingGame,
+  gatePolynomialsGame,
+  circuitVerifyGame,
 ]
 
 export function getMinigame(id: string): AnyMinigame | undefined {

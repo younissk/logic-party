@@ -37,6 +37,10 @@ export type Topic =
   | 'herbrand'
   | 'fo-resolution'
   | 'fo-equality'
+  | 'theories'
+  | 'quantifier-elimination'
+  | 'arithmetic-theories'
+  | 'circuits'
 
 export const TOPIC_LABELS: Readonly<Record<Topic, string>> = {
   syntax: 'Syntax & parsing',
@@ -56,6 +60,10 @@ export const TOPIC_LABELS: Readonly<Record<Topic, string>> = {
   herbrand: 'Herbrand',
   'fo-resolution': 'FO resolution',
   'fo-equality': 'Equality',
+  theories: 'Theories',
+  'quantifier-elimination': 'Quantifier elimination',
+  'arithmetic-theories': 'ℕ, ℤ and ℝ',
+  circuits: 'Polynomials & circuits',
 }
 
 export interface Verdict {

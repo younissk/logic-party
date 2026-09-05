@@ -31,6 +31,7 @@ export * from './foResolution'
 // Chapter 5 — theories in first-order logic.
 export * from './polynomial'
 export * from './automaton'
+export * from './dlo'
 
 /**
  * `arithmetic` is deliberately not re-exported.

@@ -868,6 +868,7 @@ const THEORIES_SECTIONS: Section[] = [
       {
         id: 'gate-polynomials',
         n: 72,
+        game: 'gate-polynomials',
         title: 'Gate polynomials — AND, OR, XOR',
         source: 'Exercise 12 · Fig. 5.3',
         stars: 1,
@@ -877,6 +878,7 @@ const THEORIES_SECTIONS: Section[] = [
       {
         id: 'circuit-verify',
         n: 73,
+        game: 'circuit-verify',
         title: 'Verify a circuit by polynomial reduction',
         source: 'exam26a Q4.4 · exam26bA Q4.4 · recap Ex 6',
         stars: 2,
@@ -984,6 +986,10 @@ export const TOPIC_CATEGORY: Readonly<Record<Topic, Category>> = {
   herbrand: 'first-order',
   'fo-resolution': 'first-order',
   'fo-equality': 'first-order',
+  theories: 'fol-theories',
+  'quantifier-elimination': 'fol-theories',
+  'arithmetic-theories': 'fol-theories',
+  circuits: 'fol-theories',
 }
 
 export function topicsInCategory(category: Category): Topic[] {
