@@ -1,0 +1,70 @@
+name: Build and deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# Least privilege by default; the deploy job asks for what it needs.
+permissions:
+  contents: read
+
+# Never let two deploys race. Queue rather than cancel, so a push that lands
+# during a deploy still ends up live.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run check
+
+      - name: Test
+        run: npm test
+
+      - name: Build
+        run: npm run build
+        env:
+          # Project pages are served from /<repo>/, so assets need that prefix.
+          # Read from the repository name rather than hardcoded, so renaming
+          # the repo does not silently break every asset URL.
+          BASE_PATH: /${{ github.event.repository.name }}/
+
+      - name: Upload the site
+        # Only the branch build is deployed; on a pull request this job just
+        # proves the site still builds.
+        if: github.event_name != 'pull_request'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+
+    permissions:
+      pages: write
+      id-token: write
+
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -12,14 +12,23 @@ function Layout() {
   )
 }
 
-export const router = createBrowserRouter([
-  {
-    element: <Layout />,
-    children: [
-      { path: '/', element: <Home /> },
-      { path: '/category/:categoryId', element: <Category /> },
-      { path: '/play/:gameId', element: <Play /> },
-      { path: '/guide/:gameId', element: <Guide /> },
-    ],
-  },
-])
+/**
+ * Vite's BASE_URL is '/' locally and '/<repo>/' on GitHub Pages. Handing it to
+ * the router keeps every <Link> correct in both, with no per-link fiddling.
+ */
+const basename = import.meta.env.BASE_URL.replace(/\/$/, '')
+
+export const router = createBrowserRouter(
+  [
+    {
+      element: <Layout />,
+      children: [
+        { path: '/', element: <Home /> },
+        { path: '/category/:categoryId', element: <Category /> },
+        { path: '/play/:gameId', element: <Play /> },
+        { path: '/guide/:gameId', element: <Guide /> },
+      ],
+    },
+  ],
+  { basename },
+)

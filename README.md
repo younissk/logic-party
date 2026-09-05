@@ -110,6 +110,27 @@ text). `.tile` deliberately sets *no* background — it is defined after
 Tailwind's utilities, so a `background` shorthand there would silently
 override every `bg-*` class put on a card.
 
+## Deploying
+
+Pushing to `main` builds and publishes to GitHub Pages via
+[`.github/workflows/deploy.yml`](.github/workflows/deploy.yml). The workflow
+typechecks and runs the tests before it builds, so a red suite does not ship.
+Pull requests run the same build without deploying.
+
+Two things a project site on GitHub Pages needs, both handled:
+
+- **Assets live under `/<repo>/`.** The workflow passes the repository name as
+  `BASE_PATH`, Vite prefixes every asset with it, and the router takes the same
+  value as its `basename` — so links are right without any per-link special
+  casing. Reading it from `github.event.repository.name` rather than hardcoding
+  means renaming the repo does not silently break every URL.
+- **There is no SPA rewrite.** GitHub Pages serves `404.html` for any path it
+  does not recognise, so `npm run build` ships a copy of `index.html` as
+  `404.html`. Without it, every deep link — every guide and category page —
+  would 404 on refresh.
+
+`public/.nojekyll` stops Pages running the output through Jekyll.
+
 ## Categories and topics
 
 The app is organised by the four chapters of the course:
