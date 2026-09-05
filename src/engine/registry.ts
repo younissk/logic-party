@@ -60,6 +60,11 @@ import { theoryDecideGame } from '@/games/theoryDecide'
 import { unifiableSortGame } from '@/games/unifiableSort'
 import { gatePolynomialsGame } from '@/games/gatePolynomials'
 import { circuitVerifyGame } from '@/games/circuitVerify'
+import { qeFiniteGame } from '@/games/qeFinite'
+import { qeDenseGame } from '@/games/qeDense'
+import { closeItUpGame } from '@/games/closeItUp'
+import { theoryPropertiesGame } from '@/games/theoryProperties'
+import { unionTroubleGame } from '@/games/unionTrouble'
 import { interpretationGame } from '@/games/interpretationGame'
 import { termBuildGame } from '@/games/termBuild'
 import { termFlatGame } from '@/games/termFlat'
@@ -132,6 +137,11 @@ export const MINIGAMES: readonly AnyMinigame[] = [
   liftingGame,
   gatePolynomialsGame,
   circuitVerifyGame,
+  qeFiniteGame,
+  qeDenseGame,
+  closeItUpGame,
+  theoryPropertiesGame,
+  unionTroubleGame,
 ]
 
 export function getMinigame(id: string): AnyMinigame | undefined {

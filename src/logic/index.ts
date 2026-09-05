@@ -32,6 +32,7 @@ export * from './foResolution'
 export * from './polynomial'
 export * from './automaton'
 export * from './dlo'
+export * from './theories'
 
 /**
  * `arithmetic` is deliberately not re-exported.

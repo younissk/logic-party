@@ -717,6 +717,7 @@ const THEORIES_SECTIONS: Section[] = [
       {
         id: 'theory-tf',
         n: 56,
+        game: 'theory-tf',
         title: 'True/false on theories — closed under implication',
         source: 'all three exams · Def. 5.1',
         stars: 3,
@@ -724,6 +725,7 @@ const THEORIES_SECTIONS: Section[] = [
       {
         id: 'theory-properties',
         n: 57,
+        game: 'theory-properties',
         title: 'Complete, decidable, finitely axiomatizable, inconsistent',
         source: 'theories2',
         requires: ['theory-tf'],
@@ -732,6 +734,7 @@ const THEORIES_SECTIONS: Section[] = [
       {
         id: 'theory-sets',
         n: 58,
+        game: 'theory-sets',
         title: 'Subsets, supersets, unions; one false formula and everything follows',
         source: 'Exercise 10 · all three exams',
         requires: ['theory-tf'],
@@ -771,6 +774,7 @@ const THEORIES_SECTIONS: Section[] = [
       {
         id: 'qe-finite',
         n: 62,
+        game: 'qe-finite',
         title: 'QE over finite universes — ∀ to ∧, ∃ to ∨',
         source: 'Example 5.5',
         requires: ['qe-basics'],
@@ -779,6 +783,7 @@ const THEORIES_SECTIONS: Section[] = [
       {
         id: 'qe-dense',
         n: 63,
+        game: 'qe-dense',
         title: 'QE for unbounded dense linear orders',
         source: 'exam25a Q4.2 · exam26bA Q4.2 · Exercise 10',
         stars: 3,
