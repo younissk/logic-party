@@ -3,3 +3,6 @@ dist
 .DS_Store
 *.local
 coverage
+
+# TypeScript incremental build cache — a build artifact, not source.
+*.tsbuildinfo
