@@ -7,9 +7,14 @@
 import type { AnyMinigame, Minigame, Topic } from './types'
 import type { Category } from './categories'
 import { categoriesOf } from './categories'
+import { bcpGame } from '@/games/bcpFixpoint'
 import { cnfPipelineGame } from '@/games/cnfPipeline'
+import { conflictClauseGame } from '@/games/conflictClause'
+import { dpGame } from '@/games/dpEliminate'
+import { dpllGame } from '@/games/dpllLeaves'
 import { derivableGame } from '@/games/derivable'
 import { equivalenceGame } from '@/games/equivalence'
+import { learnedClauseGame } from '@/games/learnedClause'
 import { modelCountGame } from '@/games/modelCount'
 import { propertyGame } from '@/games/property'
 import { refutationGame } from '@/games/refutation'
@@ -34,6 +39,11 @@ export const MINIGAMES: readonly AnyMinigame[] = [
   resolventsGame,
   derivableGame,
   refutationGame,
+  bcpGame,
+  dpGame,
+  dpllGame,
+  conflictClauseGame,
+  learnedClauseGame,
 ]
 
 export function getMinigame(id: string): AnyMinigame | undefined {
