@@ -24,15 +24,34 @@ import { dpllGame, type DpllQuestion } from './dpllLeaves'
 import { conflictClauseGame, type ConflictQuestion } from './conflictClause'
 import { learnedClauseGame, type LearnedQuestion } from './learnedClause'
 
-const draw = <Q,>(game: { generate: (c: never) => Q }, difficulty: Difficulty, count: number): Q[] =>
-  Array.from({ length: count }, (_, i) =>
+/**
+ * Generation is expensive for these games — several need a *satisfiable* or
+ * *unsatisfiable* clause set found by rejection sampling — so each sample is
+ * built once per difficulty and shared across the assertions that use it.
+ * Without this the suite is slow enough to time out on a slower machine.
+ */
+const cache = new Map<string, unknown[]>()
+
+const draw = <Q,>(
+  game: { generate: (c: never) => Q },
+  key: string,
+  difficulty: Difficulty,
+  count: number,
+): Q[] => {
+  const id = `${key}:${difficulty}:${count}`
+  const seen = cache.get(id)
+  if (seen !== undefined) return seen as Q[]
+  const made = Array.from({ length: count }, (_, i) =>
     game.generate({ rng: makeRng(`s-${i}`), difficulty, questionIndex: i } as never),
   )
+  cache.set(id, made)
+  return made
+}
 
 const setKey = (set: readonly Clause[]) => [...set.map(clauseKey)].sort().join(';')
 
 describe('BCP game', () => {
-  const sample = (d: Difficulty, n: number) => draw<BcpQuestion>(bcpGame, d, n)
+  const sample = (d: Difficulty, n: number) => draw<BcpQuestion>(bcpGame, 'bcpGame', d, n)
 
   it.each(DIFFICULTIES)('marks the reference answer correct on %s', (difficulty) => {
     for (const question of sample(difficulty, 100)) {
@@ -76,7 +95,7 @@ describe('BCP game', () => {
 })
 
 describe('DP game', () => {
-  const sample = (d: Difficulty, n: number) => draw<DpQuestion>(dpGame, d, n)
+  const sample = (d: Difficulty, n: number) => draw<DpQuestion>(dpGame, 'dpGame', d, n)
 
   it.each(DIFFICULTIES)('marks the reference answer correct on %s', (difficulty) => {
     for (const question of sample(difficulty, 100)) {
@@ -121,7 +140,7 @@ describe('DP game', () => {
 })
 
 describe('DPLL game', () => {
-  const sample = (d: Difficulty, n: number) => draw<DpllQuestion>(dpllGame, d, n)
+  const sample = (d: Difficulty, n: number) => draw<DpllQuestion>(dpllGame, 'dpllGame', d, n)
 
   it.each(DIFFICULTIES)('marks the reference answer correct on %s', (difficulty) => {
     for (const question of sample(difficulty, 80)) {
@@ -164,7 +183,7 @@ describe('DPLL game', () => {
 })
 
 describe('conflict clause game', () => {
-  const sample = (d: Difficulty, n: number) => draw<ConflictQuestion>(conflictClauseGame, d, n)
+  const sample = (d: Difficulty, n: number) => draw<ConflictQuestion>(conflictClauseGame, 'conflictClauseGame', d, n)
 
   it.each(DIFFICULTIES)('marks the reference answer correct on %s', (difficulty) => {
     for (const question of sample(difficulty, 60)) {
@@ -204,7 +223,7 @@ describe('conflict clause game', () => {
 })
 
 describe('learned clause game', () => {
-  const sample = (d: Difficulty, n: number) => draw<LearnedQuestion>(learnedClauseGame, d, n)
+  const sample = (d: Difficulty, n: number) => draw<LearnedQuestion>(learnedClauseGame, 'learnedClauseGame', d, n)
 
   it.each(DIFFICULTIES)('marks the reference answer correct on %s', (difficulty) => {
     for (const question of sample(difficulty, 60)) {

@@ -16,7 +16,9 @@ import type { Clause } from '@/logic'
 import {
   bcp,
   clauseKey,
+  clauseSetToFormula,
   hasRupProperty,
+  isSatisfiable,
   isTautologicalClause,
   findRupProof,
   negateClause,
@@ -74,6 +76,12 @@ function generate({ rng, difficulty }: GenerateContext): RupQuestion {
       clauses.push(clause)
     }
     if (clauses.length !== count) continue
+
+    // Cheap check first. Most random clause sets are satisfiable, and
+    // `findRupProof` searches every unit and binary clause with a BCP run
+    // apiece — running it on candidates that were never going to work made
+    // generation slow enough to time the tests out on a slower machine.
+    if (isSatisfiable(clauseSetToFormula(clauses))) continue
 
     // Only formulas a RUP refutation actually exists for — otherwise the
     // exercise is not the exam's exercise.

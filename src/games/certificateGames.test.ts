@@ -17,13 +17,31 @@ import { DIFFICULTIES, type Difficulty } from '@/engine/types'
 import { rupGame, type RupQuestion } from './rupProof'
 import { blockedClausesGame, type BlockedQuestion } from './blockedClauses'
 
-const draw = <Q,>(game: { generate: (c: never) => Q }, difficulty: Difficulty, count: number): Q[] =>
-  Array.from({ length: count }, (_, i) =>
+/**
+ * Generation here is genuinely expensive — a RUP question needs an
+ * unsatisfiable clause set and a proof search — so the sample is built once
+ * per difficulty and shared, rather than regenerated for every assertion.
+ */
+const cache = new Map<string, unknown[]>()
+
+const draw = <Q,>(
+  game: { generate: (c: never) => Q },
+  key: string,
+  difficulty: Difficulty,
+  count: number,
+): Q[] => {
+  const id = `${key}:${difficulty}:${count}`
+  const seen = cache.get(id)
+  if (seen !== undefined) return seen as Q[]
+  const made = Array.from({ length: count }, (_, i) =>
     game.generate({ rng: makeRng(`c-${i}`), difficulty, questionIndex: i } as never),
   )
+  cache.set(id, made)
+  return made
+}
 
 describe('RUP game', () => {
-  const sample = (d: Difficulty, n: number) => draw<RupQuestion>(rupGame, d, n)
+  const sample = (d: Difficulty, n: number) => draw<RupQuestion>(rupGame, 'rup', d, n)
 
   it.each(DIFFICULTIES)('marks the reference answer correct on %s', (difficulty) => {
     for (const question of sample(difficulty, 60)) {
@@ -76,7 +94,7 @@ describe('RUP game', () => {
 })
 
 describe('blocked clauses game', () => {
-  const sample = (d: Difficulty, n: number) => draw<BlockedQuestion>(blockedClausesGame, d, n)
+  const sample = (d: Difficulty, n: number) => draw<BlockedQuestion>(blockedClausesGame, 'bce', d, n)
 
   it.each(DIFFICULTIES)('marks the reference run correct on %s', (difficulty) => {
     for (const question of sample(difficulty, 40)) {

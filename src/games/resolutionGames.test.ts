@@ -21,15 +21,34 @@ import { resolventsGame, type ResolventsQuestion } from './resolvents'
 import { derivableGame, type DerivableQuestion } from './derivable'
 import { refutationGame, type RefutationQuestion, type Step } from './refutation'
 
-const draw = <Q,>(game: { generate: (c: never) => Q }, difficulty: Difficulty, count: number): Q[] =>
-  Array.from({ length: count }, (_, i) =>
+/**
+ * Generation is expensive for these games — several need a *satisfiable* or
+ * *unsatisfiable* clause set found by rejection sampling — so each sample is
+ * built once per difficulty and shared across the assertions that use it.
+ * Without this the suite is slow enough to time out on a slower machine.
+ */
+const cache = new Map<string, unknown[]>()
+
+const draw = <Q,>(
+  game: { generate: (c: never) => Q },
+  key: string,
+  difficulty: Difficulty,
+  count: number,
+): Q[] => {
+  const id = `${key}:${difficulty}:${count}`
+  const seen = cache.get(id)
+  if (seen !== undefined) return seen as Q[]
+  const made = Array.from({ length: count }, (_, i) =>
     game.generate({ rng: makeRng(`r-${i}`), difficulty, questionIndex: i } as never),
   )
+  cache.set(id, made)
+  return made
+}
 
 // ---------------------------------------------------------------------------
 
 describe('equivalence', () => {
-  const sample = (d: Difficulty, n: number) => draw<EquivalenceQuestion>(equivalenceGame, d, n)
+  const sample = (d: Difficulty, n: number) => draw<EquivalenceQuestion>(equivalenceGame, 'equivalenceGame', d, n)
 
   it.each(DIFFICULTIES)('marks the reference answer correct on %s', (difficulty) => {
     for (const question of sample(difficulty, 120)) {
@@ -77,7 +96,7 @@ describe('equivalence', () => {
 // ---------------------------------------------------------------------------
 
 describe('resolvents', () => {
-  const sample = (d: Difficulty, n: number) => draw<ResolventsQuestion>(resolventsGame, d, n)
+  const sample = (d: Difficulty, n: number) => draw<ResolventsQuestion>(resolventsGame, 'resolventsGame', d, n)
 
   it.each(DIFFICULTIES)('marks the reference answer correct on %s', (difficulty) => {
     for (const question of sample(difficulty, 120)) {
@@ -148,7 +167,7 @@ describe('resolvents', () => {
 // ---------------------------------------------------------------------------
 
 describe('derivable', () => {
-  const sample = (d: Difficulty, n: number) => draw<DerivableQuestion>(derivableGame, d, n)
+  const sample = (d: Difficulty, n: number) => draw<DerivableQuestion>(derivableGame, 'derivableGame', d, n)
 
   it.each(DIFFICULTIES)('marks the reference answer correct on %s', (difficulty) => {
     for (const question of sample(difficulty, 60)) {
@@ -203,7 +222,7 @@ describe('derivable', () => {
 // ---------------------------------------------------------------------------
 
 describe('refutation', () => {
-  const sample = (d: Difficulty, n: number) => draw<RefutationQuestion>(refutationGame, d, n)
+  const sample = (d: Difficulty, n: number) => draw<RefutationQuestion>(refutationGame, 'refutationGame', d, n)
 
   it.each(DIFFICULTIES)('always poses an unsatisfiable set on %s', (difficulty) => {
     for (const question of sample(difficulty, 60)) {
