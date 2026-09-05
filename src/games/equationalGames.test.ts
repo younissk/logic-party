@@ -14,6 +14,10 @@ import { compositionGame, composedOf } from './composition'
 import { matchingGame } from './matching'
 import { mguGame } from './mgu'
 import { replay } from './unifyDriver'
+import { generalityOf, moreGeneralGame } from './moreGeneral'
+import { fateOf, unifiableSortGame } from './unifiableSort'
+import { naiveStep, occursCheckGame, unfold } from './occursCheck'
+import { areVariants, termsEqual, type Term } from '@/logic'
 import { moreGeneral, showTerm, substitutionDomain, unify } from '@/logic'
 import { slotToTerm, hole } from '@/ui/TermBuilder'
 import {
@@ -412,6 +416,179 @@ describe('Unify It', () => {
         expect(verdict.correct).toBe(false)
         expect(verdict.message).not.toContain('↦')
       }
+    }
+  })
+})
+
+describe('Instance Or Not', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the reference sort correct on ${difficulty}`, () => {
+      for (const question of sample(moreGeneralGame, difficulty)) {
+        const verdict = moreGeneralGame.check(question, moreGeneralGame.solve(question))
+        expect([question.target, verdict.correct]).toEqual([question.target, true])
+      }
+    })
+
+    it(`always has something in the outer two bins on ${difficulty}`, () => {
+      for (const question of sample(moreGeneralGame, difficulty)) {
+        const bins = new Set(question.candidates.map((source) => generalityOf(question, source)))
+        expect([question.target, bins.has('general'), bins.has('no')]).toEqual([
+          question.target,
+          true,
+          true,
+        ])
+      }
+    })
+
+    it(`agrees with moreGeneral and areVariants on ${difficulty}`, () => {
+      for (const question of sample(moreGeneralGame, difficulty)) {
+        const target = parseTerm(question.target, question.signature)
+        for (const source of question.candidates) {
+          const candidate = parseTerm(source, question.signature)
+          const expected = areVariants(candidate, target)
+            ? 'variant'
+            : moreGeneral(candidate, target)
+              ? 'general'
+              : 'no'
+          expect([source, generalityOf(question, source)]).toEqual([source, expected])
+        }
+      }
+    })
+  }
+
+  it('gives partial credit for a partly right sort', () => {
+    const question = moreGeneralGame.generate({ rng: makeRng('g1'), difficulty: 'hard', questionIndex: 0 })
+    const reference = moreGeneralGame.solve(question)
+    const spoiled = [...reference]
+    spoiled[0] = spoiled[0] === 'no' ? 'general' : 'no'
+    const verdict = moreGeneralGame.check(question, spoiled)
+    expect(verdict.correct).toBe(false)
+    expect(verdict.score ?? 0).toBeGreaterThan(0.5)
+  })
+
+  it('never names a candidate in the retry message', () => {
+    for (const difficulty of DIFFICULTIES) {
+      for (const question of sample(moreGeneralGame, difficulty)) {
+        const verdict = moreGeneralGame.check(question, question.candidates.map(() => null))
+        for (const source of question.candidates) {
+          expect(verdict.message).not.toContain(source)
+        }
+      }
+    }
+  })
+})
+
+describe('Unifiable Sweep', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the reference sort correct on ${difficulty}`, () => {
+      for (const question of sample(unifiableSortGame, difficulty)) {
+        const verdict = unifiableSortGame.check(question, unifiableSortGame.solve(question))
+        expect(verdict.correct).toBe(true)
+      }
+    })
+
+    it(`always fills all three bins on ${difficulty}`, () => {
+      for (const question of sample(unifiableSortGame, difficulty)) {
+        const bins = new Set(question.pairs.map((pair) => fateOf(question, pair)))
+        expect(bins).toEqual(new Set(['unified', 'clash', 'occurs']))
+      }
+    })
+
+    it(`agrees with unify on every pair on ${difficulty}`, () => {
+      for (const question of sample(unifiableSortGame, difficulty)) {
+        for (const pair of question.pairs) {
+          const result = unify(
+            parseTerm(pair.left, question.signature),
+            parseTerm(pair.right, question.signature),
+          )
+          expect([pair.left, fateOf(question, pair)]).toEqual([
+            pair.left,
+            result.unified ? 'unified' : result.failure.reason,
+          ])
+        }
+      }
+    })
+  }
+
+  it('calls out the two failures being swapped as its own mistake', () => {
+    const question = unifiableSortGame.generate({ rng: makeRng('u1'), difficulty: 'medium', questionIndex: 0 })
+    const reference = unifiableSortGame.solve(question)
+    const swapped = reference.map((fate) =>
+      fate === 'clash' ? 'occurs' : fate === 'occurs' ? 'clash' : fate,
+    )
+    const verdict = unifiableSortGame.check(question, swapped)
+    expect(verdict.correct).toBe(false)
+    expect(verdict.message).toContain('failure bin')
+  })
+})
+
+describe('Push It Along', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the reference answer correct on ${difficulty}`, () => {
+      for (const question of sample(occursCheckGame, difficulty)) {
+        const verdict = occursCheckGame.check(question, occursCheckGame.solve(question))
+        expect([question.left, verdict.correct]).toEqual([question.left, true])
+      }
+    })
+
+    it(`stores a verdict that unify agrees with on ${difficulty}`, () => {
+      for (const question of sample(occursCheckGame, difficulty)) {
+        const result = unify(
+          parseTerm(question.left, question.signature),
+          parseTerm(question.right, question.signature),
+        )
+        // The pair is built so its only mismatch is the one binding, so the
+        // whole unification succeeds exactly when that binding is safe.
+        expect([question.left, question.resolves]).toEqual([question.left, result.unified])
+      }
+    })
+
+    it(`asks both answers on ${difficulty}`, () => {
+      const answers = new Set(
+        sample(occursCheckGame, difficulty).map((question) => question.resolves),
+      )
+      expect(answers.size).toBe(2)
+    })
+  }
+
+  it('runs away exactly when the variable occurs in the term', () => {
+    for (const question of sample(occursCheckGame, 'medium')) {
+      const left = parseTerm(question.left, question.signature)
+      const right = parseTerm(question.right, question.signature)
+      const chain = unfold(left, right, 6)
+      const last = chain[chain.length - 1] as { left: Term; right: Term }
+      const met = termsEqual(last.left, last.right)
+      expect([question.left, met]).toEqual([question.left, question.resolves])
+    }
+  })
+
+  it('grows the terms rather than repairing them when it runs away', () => {
+    const runaway = sample(occursCheckGame, 'medium').find((question) => !question.resolves)
+    expect(runaway).toBeDefined()
+    if (runaway !== undefined) {
+      const left = parseTerm(runaway.left, runaway.signature)
+      const right = parseTerm(runaway.right, runaway.signature)
+      const chain = unfold(left, right, 4)
+      expect(chain.length).toBeGreaterThan(2)
+      // Strictly bigger every step: that is what "the mismatch only moves" means.
+      for (let index = 1; index < chain.length; index++) {
+        const before = chain[index - 1] as { left: Term }
+        const after = chain[index] as { left: Term }
+        expect(showTerm(after.left).length).toBeGreaterThan(showTerm(before.left).length)
+      }
+    }
+  })
+
+  it('does nothing once the two terms agree', () => {
+    const term = parseTerm('f(x)', { f: 1 })
+    expect(naiveStep(term, term)).toBeNull()
+  })
+
+  it('never says which way the claim was wrong', () => {
+    for (const question of sample(occursCheckGame, 'hard')) {
+      const verdict = occursCheckGame.check(question, { resolves: !question.resolves, applied: 0 })
+      expect(verdict.correct).toBe(false)
+      expect(verdict.message).toBe('Not what happens')
     }
   })
 })
