@@ -78,9 +78,20 @@ export function replayRun(
 // Generation
 // ---------------------------------------------------------------------------
 
+interface System {
+  signature: Signature
+  rules: string[]
+}
+
 interface Profile {
-  systems: string[][]
-  symbols: [name: string, arity: number][]
+  /**
+   * Each system carries its own signature.
+   *
+   * Sharing one across systems meant a rule set could name a symbol with the
+   * wrong arity and only fail when the parser met it — which is a crash at
+   * question time rather than a type error at build time.
+   */
+  systems: System[]
   variables: string[]
   start: [min: number, max: number]
   par: [min: number, max: number]
@@ -88,10 +99,10 @@ interface Profile {
 
 const PROFILES: Record<Difficulty, Profile> = {
   easy: {
-    systems: [['f(f(x))->f(x)'], ['g(g(x))->x'], ['f(g(x))->g(f(x))']],
-    symbols: [
-      ['f', 1],
-      ['g', 1],
+    systems: [
+      { signature: { f: 1, g: 1 }, rules: ['f(f(x))->f(x)'] },
+      { signature: { f: 1, g: 1 }, rules: ['g(g(x))->x'] },
+      { signature: { f: 1, g: 1 }, rules: ['f(g(x))->g(f(x))'] },
     ],
     variables: ['x', 'y'],
     start: [4, 6],
@@ -99,14 +110,9 @@ const PROFILES: Record<Difficulty, Profile> = {
   },
   medium: {
     systems: [
-      ['g(f(x),y)->f(y)', 'h(x,f(y))->f(x)'],
-      ['f(f(x))->g(x)', 'g(g(x))->f(x)'],
-      ['h(x,y)->g(x)', 'g(f(x))->f(x)'],
-    ],
-    symbols: [
-      ['f', 1],
-      ['g', 2],
-      ['h', 2],
+      { signature: { f: 1, g: 2, h: 2 }, rules: ['g(f(x),y)->f(y)', 'h(x,f(y))->f(x)'] },
+      { signature: { f: 1, g: 1 }, rules: ['f(f(x))->g(x)', 'g(g(x))->f(x)'] },
+      { signature: { f: 1, g: 1, h: 2 }, rules: ['h(x,y)->g(x)', 'g(f(x))->f(x)'] },
     ],
     variables: ['x', 'y', 'z'],
     start: [6, 9],
@@ -114,14 +120,9 @@ const PROFILES: Record<Difficulty, Profile> = {
   },
   hard: {
     systems: [
-      ['g(f(x),y)->f(y)', 'h(x,f(y))->f(x)', 'f(f(x))->x'],
-      ['h(g(x,y),z)->g(h(x,z),h(y,z))', 'f(f(x))->x'],
-      ['g(h(x),y)->h(g(x,y))', 'h(h(x))->x'],
-    ],
-    symbols: [
-      ['f', 1],
-      ['g', 2],
-      ['h', 2],
+      { signature: { f: 1, g: 2, h: 2 }, rules: ['g(f(x),y)->f(y)', 'h(x,f(y))->f(x)', 'f(f(x))->x'] },
+      { signature: { f: 1, g: 2, h: 2 }, rules: ['h(g(x,y),z)->g(h(x,z),h(y,z))', 'f(f(x))->x'] },
+      { signature: { f: 1, g: 2, h: 1 }, rules: ['g(h(x),y)->h(g(x,y))', 'h(h(x))->x'] },
     ],
     variables: ['x', 'y', 'z'],
     start: [8, 12],
@@ -129,15 +130,17 @@ const PROFILES: Record<Difficulty, Profile> = {
   },
 }
 
-function randomTerm(rng: Rng, profile: Profile, budget: number): Term {
-  const usable = profile.symbols.filter(([, arity]) => arity + 1 <= budget)
-  if (budget <= 1 || usable.length === 0) return variable(rng.pick(profile.variables))
+/** A random term over one system's signature. */
+function randomTerm(rng: Rng, signature: Signature, variables: string[], budget: number): Term {
+  const symbols = Object.entries(signature)
+  const usable = symbols.filter(([, arity]) => arity + 1 <= budget)
+  if (budget <= 1 || usable.length === 0) return variable(rng.pick(variables))
   const [name, arity] = rng.pick(usable)
   const args: Term[] = []
   let left = budget - 1
   for (let index = 0; index < arity; index++) {
     const share = Math.max(1, Math.floor(left / (arity - index)))
-    const arg = randomTerm(rng, profile, rng.range(1, share))
+    const arg = randomTerm(rng, signature, variables, rng.range(1, share))
     args.push(arg)
     left -= termSize(arg)
   }
@@ -152,12 +155,11 @@ const parseRules = (sources: string[], signature: Signature): Rule[] =>
 
 function generate({ rng, difficulty }: GenerateContext): ReduceQuestion {
   const profile = PROFILES[difficulty]
-  const signature: Signature = Object.fromEntries(profile.symbols)
 
   for (let attempt = 0; attempt < 400; attempt++) {
-    const sources = rng.pick(profile.systems)
-    const rules = parseRules(sources, signature)
-    const start = randomTerm(rng, profile, rng.range(...profile.start))
+    const system = rng.pick(profile.systems)
+    const rules = parseRules(system.rules, system.signature)
+    const start = randomTerm(rng, system.signature, profile.variables, rng.range(...profile.start))
     if (isNormalForm(rules, start)) continue
 
     const run = reduce(rules, start)
@@ -166,7 +168,7 @@ function generate({ rng, difficulty }: GenerateContext): ReduceQuestion {
     // A term with only ever one redex teaches nothing about choosing.
     if (redexes(rules, start).length < 2 && par < 3) continue
 
-    return { signature, rules: sources, start: showTerm(start), par }
+    return { signature: system.signature, rules: system.rules, start: showTerm(start), par }
   }
 
   // Last resort, so a round can never stall: the exam's own question.

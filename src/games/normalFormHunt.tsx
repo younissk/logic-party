@@ -57,9 +57,14 @@ export const readRules = (question: NormalFormQuestion): Rule[] =>
 // Generation
 // ---------------------------------------------------------------------------
 
+interface System {
+  signature: Signature
+  rules: string[]
+}
+
 interface Profile {
-  systems: string[][]
-  symbols: [name: string, arity: number][]
+  /** Each system carries its own signature — see the note in Reduce It. */
+  systems: System[]
   variables: string[]
   start: [min: number, max: number]
 }
@@ -67,54 +72,52 @@ interface Profile {
 const PROFILES: Record<Difficulty, Profile> = {
   easy: {
     systems: [
-      ['g(x,f(y))->f(x)', 'g(f(x),y)->h(x)'],
-      ['f(f(x))->g(x,x)', 'f(g(x,y))->g(y,x)'],
-    ],
-    symbols: [
-      ['f', 1],
-      ['g', 2],
-      ['h', 1],
+      { signature: { f: 1, g: 2, h: 1 }, rules: ['g(x,f(y))->f(x)', 'g(f(x),y)->h(x)'] },
+      { signature: { f: 1, g: 2 }, rules: ['f(f(x))->g(x,x)', 'f(g(x,y))->g(y,x)'] },
     ],
     variables: ['x', 'y'],
     start: [4, 6],
   },
   medium: {
     systems: [
-      ['g(h(x))->f(x)', 'h(f(x))->g(x)', 'f(f(x))->h(x)', 'g(g(x))->f(x)'],
-      ['g(x,f(y))->f(x)', 'g(f(x),y)->h(x)', 'h(h(x))->f(x)'],
-    ],
-    symbols: [
-      ['f', 1],
-      ['g', 1],
-      ['h', 1],
+      {
+        signature: { f: 1, g: 1, h: 1 },
+        rules: ['g(h(x))->f(x)', 'h(f(x))->g(x)', 'f(f(x))->h(x)', 'g(g(x))->f(x)'],
+      },
+      {
+        signature: { f: 1, g: 2, h: 1 },
+        rules: ['g(x,f(y))->f(x)', 'g(f(x),y)->h(x)', 'h(h(x))->f(x)'],
+      },
     ],
     variables: ['x', 'y', 'z'],
     start: [4, 7],
   },
   hard: {
     systems: [
-      ['g(h(x))->f(x)', 'h(f(x))->g(x)', 'f(f(x))->h(x)', 'g(g(x))->f(x)'],
-      ['f(g(x))->g(f(x))', 'g(f(x))->f(g(x))', 'f(f(x))->h(x)'],
-    ],
-    symbols: [
-      ['f', 1],
-      ['g', 1],
-      ['h', 1],
+      {
+        signature: { f: 1, g: 1, h: 1 },
+        rules: ['g(h(x))->f(x)', 'h(f(x))->g(x)', 'f(f(x))->h(x)', 'g(g(x))->f(x)'],
+      },
+      {
+        signature: { f: 1, g: 1, h: 1 },
+        rules: ['f(g(x))->g(f(x))', 'g(f(x))->f(g(x))', 'f(f(x))->h(x)'],
+      },
     ],
     variables: ['x', 'y', 'z'],
     start: [6, 9],
   },
 }
 
-function randomTerm(rng: Rng, profile: Profile, budget: number): Term {
-  const usable = profile.symbols.filter(([, arity]) => arity + 1 <= budget)
-  if (budget <= 1 || usable.length === 0) return variable(rng.pick(profile.variables))
+function randomTerm(rng: Rng, signature: Signature, variables: string[], budget: number): Term {
+  const symbols = Object.entries(signature)
+  const usable = symbols.filter(([, arity]) => arity + 1 <= budget)
+  if (budget <= 1 || usable.length === 0) return variable(rng.pick(variables))
   const [name, arity] = rng.pick(usable)
   const args: Term[] = []
   let left = budget - 1
   for (let index = 0; index < arity; index++) {
     const share = Math.max(1, Math.floor(left / (arity - index)))
-    const arg = randomTerm(rng, profile, rng.range(1, share))
+    const arg = randomTerm(rng, signature, variables, rng.range(1, share))
     args.push(arg)
     left -= termSize(arg)
   }
@@ -123,15 +126,17 @@ function randomTerm(rng: Rng, profile: Profile, budget: number): Term {
 
 function generate({ rng, difficulty }: GenerateContext): NormalFormQuestion {
   const profile = PROFILES[difficulty]
-  const signature: Signature = Object.fromEntries(profile.symbols)
 
   for (let attempt = 0; attempt < 400; attempt++) {
-    const sources = rng.pick(profile.systems)
-    const rules = sources.map((source) => {
+    const system = rng.pick(profile.systems)
+    const rules = system.rules.map((source) => {
       const [left, right] = source.split('->')
-      return rule(parseTerm(left as string, signature), parseTerm(right as string, signature))
+      return rule(
+        parseTerm(left as string, system.signature),
+        parseTerm(right as string, system.signature),
+      )
     })
-    const start = randomTerm(rng, profile, rng.range(...profile.start))
+    const start = randomTerm(rng, system.signature, profile.variables, rng.range(...profile.start))
     if (isNormalForm(rules, start)) continue
 
     const outputs = normalForms(rules, start)
@@ -139,8 +144,8 @@ function generate({ rng, difficulty }: GenerateContext): NormalFormQuestion {
     if (outputs.length < 2 || outputs.length > 4) continue
 
     return {
-      signature,
-      rules: sources,
+      signature: system.signature,
+      rules: system.rules,
       start: showTerm(start),
       outputs: outputs.map(showTerm),
     }
@@ -148,15 +153,15 @@ function generate({ rng, difficulty }: GenerateContext): NormalFormQuestion {
 
   // Last resort, so a round can never stall: the exercise's own system.
   const fallback: Signature = { f: 1, g: 1, h: 1 }
-  const rules = ['g(h(x))->f(x)', 'h(f(x))->g(x)', 'f(f(x))->h(x)', 'g(g(x))->f(x)']
-  const parsed = rules.map((source) => {
+  const sources = ['g(h(x))->f(x)', 'h(f(x))->g(x)', 'f(f(x))->h(x)', 'g(g(x))->f(x)']
+  const parsed = sources.map((source) => {
     const [left, right] = source.split('->')
     return rule(parseTerm(left as string, fallback), parseTerm(right as string, fallback))
   })
   const start = parseTerm('g(h(f(z)))', fallback)
   return {
     signature: fallback,
-    rules,
+    rules: sources,
     start: showTerm(start),
     outputs: normalForms(parsed, start).map(showTerm),
   }

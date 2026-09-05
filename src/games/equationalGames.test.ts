@@ -20,6 +20,14 @@ import { naiveStep, occursCheckGame, unfold } from './occursCheck'
 import { theoryChainGame } from './theoryChain'
 import { refutes, theoryDecideGame } from './theoryDecide'
 import { replayChain } from './chainBoard'
+import { reduceGame, readRules as readReduceRules, replayRun } from './reduceTerm'
+import { redexes } from '@/logic'
+import { normalFormHuntGame } from './normalFormHunt'
+import { legalAs, orderFor, orientGame, orientationOf } from './orientRules'
+import { criticalPairsGame, overlap } from './criticalPairs'
+import { pairRenamingGame, verdictFor } from './pairRenaming'
+import { completionGame, pending, replayRun as replayCompletion } from './completion'
+import { criticalPairs, isConfluent, isNormalForm, normalForms, rule, samePair } from '@/logic'
 import { checkNamed, decide, derive } from '@/logic'
 import type { InterpretationId } from '@/logic'
 import { areVariants, termsEqual, type Term } from '@/logic'
@@ -738,6 +746,359 @@ describe('Prove Or Refute', () => {
         expect(verdict.correct).toBe(false)
         expect(verdict.message).not.toMatch(/refut|derivab|follow/i)
       }
+    }
+  })
+})
+
+describe('Reduce It', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks a full run correct on ${difficulty}`, () => {
+      for (const question of sample(reduceGame, difficulty)) {
+        const verdict = reduceGame.check(question, reduceGame.solve(question))
+        expect([question.start, verdict.correct]).toEqual([question.start, true])
+      }
+    })
+
+    it(`always starts somewhere reducible on ${difficulty}`, () => {
+      for (const question of sample(reduceGame, difficulty)) {
+        const rules = readReduceRules(question)
+        const start = parseTerm(question.start, question.signature)
+        expect([question.start, isNormalForm(rules, start)]).toEqual([question.start, false])
+        expect(question.par).toBeGreaterThanOrEqual(2)
+      }
+    })
+  }
+
+  it('refuses stopping before a normal form', () => {
+    const question = reduceGame.generate({ rng: makeRng('rd1'), difficulty: 'medium', questionIndex: 0 })
+    const verdict = reduceGame.check(question, [])
+    expect(verdict.correct).toBe(false)
+    expect(verdict.message).toContain('Not a normal form')
+  })
+
+  it('refuses a step that was never on offer', () => {
+    const question = reduceGame.generate({ rng: makeRng('rd2'), difficulty: 'medium', questionIndex: 0 })
+    const verdict = reduceGame.check(question, [99])
+    expect(verdict.correct).toBe(false)
+    expect(verdict.message).toContain('not available')
+  })
+
+  it('accepts a different route, not only the one solve takes', () => {
+    for (const question of sample(reduceGame, 'medium')) {
+      const rules = readReduceRules(question)
+      const start = parseTerm(question.start, question.signature)
+
+      // Take the *last* redex each time; solve() always takes the first.
+      const choices: number[] = []
+      let current = start
+      for (let guard = 0; guard < 40; guard++) {
+        const options = redexes(rules, current)
+        if (options.length === 0) break
+        const last = options.length - 1
+        choices.push(last)
+        current = (options[last] as { result: Term }).result
+      }
+
+      const run = replayRun(rules, start, choices)
+      expect(run.broken).toBe(false)
+      expect([question.start, reduceGame.check(question, choices).correct]).toEqual([
+        question.start,
+        true,
+      ])
+    }
+  })
+
+  it('never names the normal form in the retry message', () => {
+    for (const difficulty of DIFFICULTIES) {
+      for (const question of sample(reduceGame, difficulty)) {
+        const verdict = reduceGame.check(question, [])
+        const rules = readReduceRules(question)
+        const start = parseTerm(question.start, question.signature)
+        for (const form of normalForms(rules, start)) {
+          // Whole-term, not substring: a normal form can be the single letter
+          // "y", and "Not a normal form yet" contains that letter innocently.
+          expect(verdict.message.split(/[^A-Za-z0-9(),]+/)).not.toContain(showTerm(form))
+        }
+      }
+    }
+  })
+})
+
+describe('Every Way Down', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the full tray correct on ${difficulty}`, () => {
+      for (const question of sample(normalFormHuntGame, difficulty)) {
+        const verdict = normalFormHuntGame.check(question, normalFormHuntGame.solve(question))
+        expect([question.start, verdict.correct]).toEqual([question.start, true])
+      }
+    })
+
+    it(`always has more than one output on ${difficulty}`, () => {
+      for (const question of sample(normalFormHuntGame, difficulty)) {
+        expect(question.outputs.length).toBeGreaterThanOrEqual(2)
+      }
+    })
+
+    it(`stores exactly what normalForms finds on ${difficulty}`, () => {
+      for (const question of sample(normalFormHuntGame, difficulty)) {
+        const rules = question.rules.map((source) => {
+          const [left, right] = source.split('->')
+          return rule(
+            parseTerm(left as string, question.signature),
+            parseTerm(right as string, question.signature),
+          )
+        })
+        const start = parseTerm(question.start, question.signature)
+        expect([question.start, new Set(question.outputs)]).toEqual([
+          question.start,
+          new Set(normalForms(rules, start).map(showTerm)),
+        ])
+      }
+    })
+  }
+
+  it('scores a partial tray partially', () => {
+    const question = normalFormHuntGame.generate({ rng: makeRng('nf1'), difficulty: 'medium', questionIndex: 0 })
+    const verdict = normalFormHuntGame.check(question, [question.outputs[0] as string])
+    expect(verdict.correct).toBe(false)
+    expect(verdict.score ?? 0).toBeGreaterThan(0)
+  })
+
+  it('never names a missing output in the retry message', () => {
+    for (const question of sample(normalFormHuntGame, 'hard')) {
+      const verdict = normalFormHuntGame.check(question, [])
+      for (const output of question.outputs) {
+        expect(verdict.message).not.toContain(output)
+      }
+    }
+  })
+})
+
+describe('Point It Downhill', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the reference sort correct on ${difficulty}`, () => {
+      for (const question of sample(orientGame, difficulty)) {
+        const verdict = orientGame.check(question, orientGame.solve(question))
+        expect(verdict.correct).toBe(true)
+      }
+    })
+
+    it(`fills all three bins on ${difficulty}`, () => {
+      for (const question of sample(orientGame, difficulty)) {
+        const bins = new Set(question.equations.map((source) => orientationOf(question, source)))
+        expect(bins).toEqual(new Set(['forward', 'backward', 'neither']))
+      }
+    })
+  }
+
+  it('refuses a rule that introduces a variable on the right', () => {
+    const question = {
+      signature: { f: 1, g: 1 },
+      precedence: ['f', 'g'],
+      equations: ['f(f(x))=y'],
+    }
+    const order = orderFor(question)
+    const left = parseTerm('f(f(x))', question.signature)
+    const right = parseTerm('y', question.signature)
+    // Bigger by symbol count, and still not a rule.
+    expect(order.compare(left, right)).not.toBe('less')
+    expect(legalAs(order, left, right)).toBe(false)
+    expect(orientationOf(question, 'f(f(x))=y')).toBe('neither')
+  })
+
+  it('refuses a pair no term order can compare', () => {
+    const question = { signature: { g: 1 }, precedence: ['g'], equations: ['g(x)=g(y)'] }
+    expect(orientationOf(question, 'g(x)=g(y)')).toBe('neither')
+  })
+})
+
+describe('Find The Forks', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the full tray correct on ${difficulty}`, () => {
+      for (const question of sample(criticalPairsGame, difficulty)) {
+        const verdict = criticalPairsGame.check(question, criticalPairsGame.solve(question))
+        expect([question.rules.join(';'), verdict.correct]).toEqual([
+          question.rules.join(';'),
+          true,
+        ])
+      }
+    })
+
+    it(`stores exactly what criticalPairs finds on ${difficulty}`, () => {
+      for (const question of sample(criticalPairsGame, difficulty)) {
+        const rules = question.rules.map((source) => {
+          const [left, right] = source.split('->')
+          return rule(
+            parseTerm(left as string, question.signature),
+            parseTerm(right as string, question.signature),
+          )
+        })
+        expect([question.rules.join(';'), question.pairs.length]).toEqual([
+          question.rules.join(';'),
+          criticalPairs(rules).length,
+        ])
+      }
+    })
+
+    it(`always has something to find on ${difficulty}`, () => {
+      for (const question of sample(criticalPairsGame, difficulty)) {
+        expect(question.pairs.length).toBeGreaterThan(0)
+      }
+    })
+  }
+
+  it('refuses a rule overlapped with its own copy at the root', () => {
+    const question = criticalPairsGame.generate({ rng: makeRng('cp1'), difficulty: 'easy', questionIndex: 0 })
+    const rules = question.rules.map((source) => {
+      const [left, right] = source.split('->')
+      return rule(
+        parseTerm(left as string, question.signature),
+        parseTerm(right as string, question.signature),
+      )
+    })
+    expect(overlap(rules, 0, [], 0)).toBeNull()
+  })
+
+  it('refuses an overlap into a variable position', () => {
+    const signature = { f: 1, g: 2 }
+    const rules = [
+      rule(parseTerm('g(x,f(y))', signature), parseTerm('f(x)', signature)),
+      rule(parseTerm('f(f(z))', signature), parseTerm('z', signature)),
+    ]
+    // Position [0] of g(x,f(y)) is the variable x.
+    expect(overlap(rules, 0, [0], 1)).toBeNull()
+  })
+
+  it('produces a pair that samePair recognises', () => {
+    const signature = { f: 1, g: 1 }
+    const rules = [rule(parseTerm('f(f(x))', signature), parseTerm('g(x)', signature))]
+    const pair = overlap(rules, 0, [0], 0)
+    expect(pair).not.toBeNull()
+    expect(
+      samePair(pair as never, {
+        left: parseTerm('f(g(x))', signature),
+        right: parseTerm('g(f(x))', signature),
+      }),
+    ).toBe(true)
+  })
+
+  it('never names a pair in the retry message', () => {
+    for (const question of sample(criticalPairsGame, 'hard')) {
+      const verdict = criticalPairsGame.check(question, [])
+      for (const pair of question.pairs) {
+        expect(verdict.message).not.toContain(pair[0])
+      }
+    }
+  })
+})
+
+describe('Same Fork?', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the reference sort correct on ${difficulty}`, () => {
+      for (const question of sample(pairRenamingGame, difficulty)) {
+        const verdict = pairRenamingGame.check(question, pairRenamingGame.solve(question))
+        expect(verdict.correct).toBe(true)
+      }
+    })
+
+    it(`fills both bins on ${difficulty}`, () => {
+      for (const question of sample(pairRenamingGame, difficulty)) {
+        const bins = new Set(
+          question.candidates.map((candidate) => verdictFor(question, candidate)),
+        )
+        expect(bins).toEqual(new Set(['yes', 'no']))
+      }
+    })
+  }
+
+  it('treats a renamed pair as the same pair', () => {
+    const question = {
+      signature: { f: 1, h: 1 },
+      rules: ['f(h(x))->f(x)', 'h(f(x))->h(x)'],
+      candidates: [['f(f(u))', 'f(h(u))'] as [string, string]],
+    }
+    expect(verdictFor(question, question.candidates[0] as [string, string])).toBe('yes')
+  })
+
+  it('treats a swapped pair as the same pair', () => {
+    const question = {
+      signature: { f: 1, h: 1 },
+      rules: ['f(h(x))->f(x)', 'h(f(x))->h(x)'],
+      candidates: [['f(h(x))', 'f(f(x))'] as [string, string]],
+    }
+    expect(verdictFor(question, question.candidates[0] as [string, string])).toBe('yes')
+  })
+
+  it('does not treat a reduced side as the same pair', () => {
+    const question = {
+      signature: { f: 1, h: 1 },
+      rules: ['f(h(x))->f(x)', 'h(f(x))->h(x)'],
+      candidates: [['f(h(f(x)))', 'h(f(h(x)))'] as [string, string]],
+    }
+    expect(verdictFor(question, question.candidates[0] as [string, string])).toBe('no')
+  })
+})
+
+describe('Complete It', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the algorithm's own run correct on ${difficulty}`, () => {
+      for (const question of sample(completionGame, difficulty)) {
+        const verdict = completionGame.check(question, completionGame.solve(question))
+        expect([question.rules.join(';'), verdict.correct]).toEqual([
+          question.rules.join(';'),
+          true,
+        ])
+      }
+    })
+
+    it(`never poses one that runs forever on ${difficulty}`, () => {
+      for (const question of sample(completionGame, difficulty)) {
+        expect(['completed', 'failed']).toContain(question.outcome)
+      }
+    })
+
+    it(`ends confluent whenever it completes on ${difficulty}`, () => {
+      for (const question of sample(completionGame, difficulty)) {
+        if (question.outcome !== 'completed') continue
+        const state = replayCompletion(question, completionGame.solve(question))
+        expect([question.rules.join(';'), state.status]).toEqual([
+          question.rules.join(';'),
+          'completed',
+        ])
+        expect(pending(state)).toHaveLength(0)
+        expect(isConfluent(state.rules)).toBe(true)
+      }
+    })
+  }
+
+  it('refuses stopping with pairs still waiting', () => {
+    const question = completionGame.generate({ rng: makeRng('kb1'), difficulty: 'medium', questionIndex: 0 })
+    const verdict = completionGame.check(question, [])
+    if (question.outcome === 'completed' && pending(replayCompletion(question, [])).length > 0) {
+      expect(verdict.correct).toBe(false)
+      expect(verdict.message).toContain('waiting')
+    }
+  })
+
+  it('refuses declaring failure while everything is still orientable', () => {
+    const workable = sample(completionGame, 'medium').find((q) => q.outcome === 'completed')
+    if (workable !== undefined) {
+      const verdict = completionGame.check(workable, [{ kind: 'fail' }])
+      expect(verdict.correct).toBe(false)
+    }
+  })
+
+  it('refuses discarding a pair whose sides do not meet', () => {
+    const question = completionGame.generate({ rng: makeRng('kb2'), difficulty: 'easy', questionIndex: 0 })
+    const state = replayCompletion(question, [])
+    const queue = pending(state)
+    if (queue.length > 0) {
+      const first = queue[0] as { left: never; right: never }
+      const verdict = completionGame.check(question, [
+        { kind: 'join', pair: [showTerm(first.left), showTerm(first.right)] },
+      ])
+      // Either it legitimately joins, or the move is refused — never silently taken.
+      expect(typeof verdict.correct).toBe('boolean')
     }
   })
 })

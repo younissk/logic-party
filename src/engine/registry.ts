@@ -34,6 +34,9 @@ import { mguGame } from '@/games/mgu'
 import { occursCheckGame } from '@/games/occursCheck'
 import { theoryChainGame } from '@/games/theoryChain'
 import { normalFormHuntGame } from '@/games/normalFormHunt'
+import { criticalPairsGame } from '@/games/criticalPairs'
+import { completionGame } from '@/games/completion'
+import { pairRenamingGame } from '@/games/pairRenaming'
 import { orientGame } from '@/games/orientRules'
 import { reduceGame } from '@/games/reduceTerm'
 import { theoryDecideGame } from '@/games/theoryDecide'
@@ -88,6 +91,9 @@ export const MINIGAMES: readonly AnyMinigame[] = [
   reduceGame,
   normalFormHuntGame,
   orientGame,
+  criticalPairsGame,
+  pairRenamingGame,
+  completionGame,
 ]
 
 export function getMinigame(id: string): AnyMinigame | undefined {
