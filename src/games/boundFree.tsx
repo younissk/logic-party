@@ -17,9 +17,11 @@ import {
   isClean,
   isClosed,
   parseFormula,
+  renderWithPositions,
   showFormula,
   type FoFormula,
   type FoSignature,
+  type VariableSpot,
 } from '@/logic'
 import { defineMinigame } from '@/engine/registry'
 import type { Difficulty, GenerateContext, MinigameScreenProps, Verdict } from '@/engine/types'
@@ -50,87 +52,17 @@ export const formulaOf = (question: BoundFreeQuestion): FoFormula =>
   parseFormula(question.source, signatureOf(question))
 
 /** One occurrence of a variable in the printed formula. */
-export interface Occurrence {
-  /** Index of its first character in `showFormula(formula)`. */
-  at: number
-  name: string
-  bound: boolean
-}
+export type Occurrence = VariableSpot
 
 /**
- * Every variable occurrence *inside an atom*, with its position in the print.
+ * Every variable occurrence inside an atom, with its position in the print.
  *
- * The variable written next to a quantifier is not an occurrence to judge —
- * it is the binder itself — so those are skipped, which is also how the notes
- * read the tree.
+ * Delegated to the logic core so the game and the printer cannot disagree
+ * about where a bracket goes — which they did, the moment the printer learned
+ * to bracket a quantified operand.
  */
-export function occurrences(formula: FoFormula): Occurrence[] {
-  const found: Occurrence[] = []
-  let cursor = 0
-
-  const emit = (text: string): void => {
-    cursor += text.length
-  }
-
-  const walkTerm = (term: { kind: string; name: string; args?: unknown[] }, bound: string[]): void => {
-    if (term.kind === 'var') {
-      found.push({ at: cursor, name: term.name, bound: bound.includes(term.name) })
-      emit(term.name)
-      return
-    }
-    emit(`${term.name}(`)
-    const args = (term.args ?? []) as typeof term[]
-    args.forEach((arg, index) => {
-      if (index > 0) emit(',')
-      walkTerm(arg, bound)
-    })
-    emit(')')
-  }
-
-  const walk = (node: FoFormula, bound: string[]): void => {
-    switch (node.kind) {
-      case 'true':
-      case 'false':
-        emit(showFormula(node))
-        return
-      case 'atom':
-        emit(node.args.length === 0 ? node.predicate : `${node.predicate}(`)
-        node.args.forEach((arg, index) => {
-          if (index > 0) emit(',')
-          walkTerm(arg as never, bound)
-        })
-        if (node.args.length > 0) emit(')')
-        return
-      case 'not':
-        emit('¬')
-        walk(node.body, bound)
-        return
-      case 'binary':
-        emit('(')
-        walk(node.left, bound)
-        emit(CONNECTIVE[node.connective] as string)
-        walk(node.right, bound)
-        emit(')')
-        return
-      case 'quantified':
-        emit(node.quantifier === 'forall' ? '∀' : '∃')
-        emit(node.variable)
-        emit(':')
-        walk(node.body, [...bound, node.variable])
-        return
-    }
-  }
-
-  walk(formula, [])
-  return found
-}
-
-const CONNECTIVE: Record<string, string> = {
-  and: '∧',
-  or: '∨',
-  implies: '→',
-  iff: '↔',
-}
+export const occurrences = (formula: FoFormula): Occurrence[] =>
+  renderWithPositions(formula).spots
 
 // ---------------------------------------------------------------------------
 // Generation

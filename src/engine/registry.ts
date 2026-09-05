@@ -38,6 +38,9 @@ import { criticalPairsGame } from '@/games/criticalPairs'
 import { completionGame } from '@/games/completion'
 import { boundFreeGame } from '@/games/boundFree'
 import { foEvaluateGame } from '@/games/foEvaluate'
+import { prenexGame } from '@/games/prenex'
+import { clausifyGame } from '@/games/clausify'
+import { skolemGame } from '@/games/skolem'
 import { wellFormedGame } from '@/games/wellFormed'
 import { pairRenamingGame } from '@/games/pairRenaming'
 import { orientGame } from '@/games/orientRules'
@@ -100,6 +103,9 @@ export const MINIGAMES: readonly AnyMinigame[] = [
   wellFormedGame,
   boundFreeGame,
   foEvaluateGame,
+  prenexGame,
+  skolemGame,
+  clausifyGame,
 ]
 
 export function getMinigame(id: string): AnyMinigame | undefined {

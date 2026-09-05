@@ -32,8 +32,22 @@ describe('parsing and printing', () => {
       '∀x:(weekend(x)→¬weekend(next(next(x))))',
       '∀x:before(monday(),x)',
     ]) {
-      expect(showFormula(parseFormula(source, weekdays))).toBe(source)
+      // Printing then reading back must give the same formula. It need not give
+      // the same *string*: the printer adds brackets around a quantified
+      // operand that the notes leave to the reader.
+      const once = parseFormula(source, weekdays)
+      const twice = parseFormula(showFormula(once), weekdays)
+      expect([source, showFormula(twice)]).toEqual([source, showFormula(once)])
     }
+  })
+
+  it('brackets a quantified operand, because its scope would otherwise run on', () => {
+    const sig: FoSignature = { predicates: { p: 1, q: 1 }, functions: { a: 0 } }
+    // (∃x:p(x))→q(a()) must not print as ∃x:p(x)→q(a()), which reads back as
+    // ∃x:(p(x)→q(a())) — a different formula with a different prefix.
+    const printed = showFormula(parseFormula('(∃x:p(x))→q(a())', sig))
+    expect(printed).toBe('((∃x:p(x))→q(a()))')
+    expect(showFormula(parseFormula(printed, sig))).toBe(printed)
   })
 
   it('accepts the exercises’ dot separator and ASCII connectives', () => {

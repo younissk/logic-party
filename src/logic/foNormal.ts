@@ -90,8 +90,8 @@ const flip = (quantifier: Quantifier): Quantifier =>
 /** Which equivalence of Figure 4.1 a step used. */
 export type PnfRule =
   | 'iff'
-  | 'foNot-forall'
-  | 'foNot-exists'
+  | 'not-forall'
+  | 'not-exists'
   | 'forall-implies-left'
   | 'exists-implies-left'
   | 'quantifier-left'
@@ -99,8 +99,8 @@ export type PnfRule =
 
 export const PNF_RULE_LABELS: Readonly<Record<PnfRule, string>> = {
   iff: 'φ↔ψ ≡ (φ→ψ)∧(ψ→φ)',
-  'foNot-forall': '¬∀x:φ ≡ ∃x:¬φ',
-  'foNot-exists': '¬∃x:φ ≡ ∀x:¬φ',
+  'not-forall': '¬∀x:φ ≡ ∃x:¬φ',
+  'not-exists': '¬∃x:φ ≡ ∀x:¬φ',
   'forall-implies-left': '(∀x:φ)→ψ ≡ ∃x:(φ→ψ)',
   'exists-implies-left': '(∃x:φ)→ψ ≡ ∀x:(φ→ψ)',
   'quantifier-left': '(Qx:φ)∘ψ ≡ Qx:(φ∘ψ)',
@@ -188,7 +188,7 @@ function topLevelMoves(formula: FoFormula): PnfMove[] {
     const inner = formula.body
     return [
       {
-        rule: inner.quantifier === 'forall' ? 'foNot-forall' : 'foNot-exists',
+        rule: inner.quantifier === 'forall' ? 'not-forall' : 'not-exists',
         result: {
           kind: 'quantified',
           quantifier: flip(inner.quantifier),

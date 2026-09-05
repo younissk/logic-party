@@ -17,7 +17,11 @@ import {
   prefixOf,
   type StructureSpec,
 } from './foEvaluate'
-import type { Structure } from '@/logic'
+import type { FoFormula, Structure } from '@/logic'
+import { isPrenex, pnfOptions, showFormula as show, splitPrenex, toPrenex } from '@/logic'
+import { prenexGame, formulaOf as prenexFormulaOf, replayPrenex } from './prenex'
+import { existentials, skolemGame, formulaOf as skolemFormulaOf } from './skolem'
+import { clausifyGame, drive, isCnf, matrixOf } from './clausify'
 
 const SEEDS = ['a1', 'b2', 'c3', 'd4', 'e5', 'f6']
 
@@ -215,6 +219,189 @@ describe('Name The Element', () => {
       for (const question of sample(foEvaluateGame, difficulty)) {
         const spec = (STRUCTURES[question.spec] as { spec: StructureSpec }).spec
         expect(() => parseFormula(question.source, spec.signature)).not.toThrow()
+      }
+    }
+  })
+})
+
+describe('Pull Them Out', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the reference run correct on ${difficulty}`, () => {
+      for (const question of sample(prenexGame, difficulty)) {
+        const verdict = prenexGame.check(question, prenexGame.solve(question))
+        expect([question.source, verdict.correct]).toEqual([question.source, true])
+      }
+    })
+
+    it(`hands over a clean formula that is not already prenex on ${difficulty}`, () => {
+      for (const question of sample(prenexGame, difficulty)) {
+        const formula = prenexFormulaOf(question)
+        expect([question.source, isClean(formula)]).toEqual([question.source, true])
+        expect([question.source, isPrenex(formula)]).toEqual([question.source, false])
+        expect(question.par).toBeGreaterThan(0)
+      }
+    })
+
+    it(`stores the shortest length on ${difficulty}`, () => {
+      for (const question of sample(prenexGame, difficulty)) {
+        expect([question.source, question.par]).toEqual([
+          question.source,
+          toPrenex(prenexFormulaOf(question)).steps.length,
+        ])
+      }
+    })
+  }
+
+  it('accepts a different order of choices that still reaches PNF', () => {
+    for (const question of sample(prenexGame, 'medium')) {
+      const start = prenexFormulaOf(question)
+      // Always take the *last* option rather than the first.
+      const moves: number[] = []
+      let current = start
+      for (let guard = 0; guard < 40; guard++) {
+        const options = pnfOptions(current)
+        if (options.length === 0) break
+        const last = options.length - 1
+        moves.push(last)
+        current = (options[last] as { result: FoFormula }).result
+      }
+      expect(replayPrenex(start, moves).broken).toBe(false)
+      expect([question.source, prenexGame.check(question, moves).correct]).toEqual([
+        question.source,
+        true,
+      ])
+    }
+  })
+
+  it('refuses stopping early and refuses a move that is not on offer', () => {
+    const question = prenexGame.generate({ rng: makeRng('pn1'), difficulty: 'medium', questionIndex: 0 })
+    expect(prenexGame.check(question, []).correct).toBe(false)
+    expect(prenexGame.check(question, [99]).message).toContain('not available')
+  })
+
+  it('never names a rule or the prefix in the retry message', () => {
+    for (const difficulty of DIFFICULTIES) {
+      for (const question of sample(prenexGame, difficulty)) {
+        const verdict = prenexGame.check(question, [])
+        expect(verdict.message).not.toContain('∀')
+        expect(verdict.message).not.toContain('∃')
+      }
+    }
+  })
+})
+
+describe('Name The Witness', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the reference lists correct on ${difficulty}`, () => {
+      for (const question of sample(skolemGame, difficulty)) {
+        const verdict = skolemGame.check(question, skolemGame.solve(question))
+        expect([question.source, verdict.correct]).toEqual([question.source, true])
+      }
+    })
+
+    it(`always poses a prenex formula with at least one ∃ on ${difficulty}`, () => {
+      for (const question of sample(skolemGame, difficulty)) {
+        const formula = skolemFormulaOf(question)
+        expect([question.source, isPrenex(formula)]).toEqual([question.source, true])
+        expect(existentials(formula).spots.length).toBeGreaterThan(0)
+      }
+    })
+
+    it(`asks only for ∀s to the left on ${difficulty}`, () => {
+      for (const question of sample(skolemGame, difficulty)) {
+        const formula = skolemFormulaOf(question)
+        const { prefix, spots } = existentials(formula)
+        const names = prefix.map((entry) => entry.variable)
+        for (const spot of spots) {
+          const at = names.indexOf(spot.variable)
+          for (const argument of spot.dependsOn) {
+            expect(names.indexOf(argument)).toBeLessThan(at)
+            expect(prefix[names.indexOf(argument)]?.quantifier).toBe('forall')
+          }
+        }
+      }
+    })
+  }
+
+  it('accepts the arguments in any order', () => {
+    const question = { predicates: { q: 3 }, functions: {}, source: '∀x:∀y:∃z:q(x,y,z)' }
+    expect(skolemGame.check(question, [['y', 'x']]).correct).toBe(true)
+    expect(skolemGame.check(question, [['x', 'y']]).correct).toBe(true)
+  })
+
+  it('refuses a constant where a function is needed', () => {
+    const question = { predicates: { q: 2 }, functions: {}, source: '∀x:∃y:q(x,y)' }
+    expect(skolemGame.check(question, [[]]).correct).toBe(false)
+  })
+
+  it('refuses a dependency on a variable to the right', () => {
+    const question = { predicates: { q: 3 }, functions: {}, source: '∃x:∀y:∀z:q(x,y,z)' }
+    expect(skolemGame.check(question, [['y']]).correct).toBe(false)
+    expect(skolemGame.check(question, [[]]).correct).toBe(true)
+  })
+
+  it('never names the right arguments in the retry message', () => {
+    for (const difficulty of DIFFICULTIES) {
+      for (const question of sample(skolemGame, difficulty)) {
+        const verdict = skolemGame.check(question, existentials(skolemFormulaOf(question)).spots.map(() => []))
+        if (verdict.correct) continue
+        expect(verdict.message).not.toContain('(')
+      }
+    }
+  })
+})
+
+describe('Down To Clauses', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the reference run correct on ${difficulty}`, () => {
+      for (const question of sample(clausifyGame, difficulty)) {
+        const verdict = clausifyGame.check(question, clausifyGame.solve(question))
+        expect([question.matrix, verdict.correct]).toEqual([question.matrix, true])
+      }
+    })
+
+    it(`never poses a matrix that is already CNF on ${difficulty}`, () => {
+      for (const question of sample(clausifyGame, difficulty)) {
+        expect([question.matrix, isCnf(matrixOf(question))]).toEqual([question.matrix, false])
+        expect(question.par).toBeGreaterThan(0)
+      }
+    })
+  }
+
+  it('counts a step taken out of turn as wasted, not as progress', () => {
+    const question = clausifyGame.generate({
+      rng: makeRng('cl1'),
+      difficulty: 'medium',
+      questionIndex: 0,
+    })
+    const reference = clausifyGame.solve(question)
+    const spoiled = ['distribute' as const, ...reference]
+    const run = drive(matrixOf(question), spoiled)
+    if (run.wasted > 0) {
+      const verdict = clausifyGame.check(question, spoiled)
+      expect(verdict.correct).toBe(false)
+      expect(verdict.message).toContain('did nothing')
+    }
+  })
+
+  it('refuses stopping before CNF', () => {
+    const question = clausifyGame.generate({
+      rng: makeRng('cl2'),
+      difficulty: 'medium',
+      questionIndex: 0,
+    })
+    const verdict = clausifyGame.check(question, [])
+    expect(verdict.correct).toBe(false)
+    expect(verdict.message).toContain('CNF')
+  })
+
+  it('never names the clause set in the retry message', () => {
+    for (const difficulty of DIFFICULTIES) {
+      for (const question of sample(clausifyGame, difficulty)) {
+        const verdict = clausifyGame.check(question, [])
+        expect(verdict.message).not.toContain('∨')
+        expect(show(matrixOf(question))).toBeTruthy()
+        expect(splitPrenex(matrixOf(question)).prefix).toHaveLength(0)
       }
     }
   })

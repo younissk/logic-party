@@ -102,10 +102,120 @@ export function showFormula(formula: FoFormula): string {
     case 'not':
       return `¬${showFormula(formula.body)}`
     case 'binary':
-      return `(${showFormula(formula.left)}${CONNECTIVE_SYMBOL[formula.connective]}${showFormula(formula.right)})`
+      return `(${operand(formula.left)}${CONNECTIVE_SYMBOL[formula.connective]}${operand(formula.right)})`
     case 'quantified':
       return `${QUANTIFIER_SYMBOL[formula.quantifier]}${formula.variable}:${showFormula(formula.body)}`
   }
+}
+
+/**
+ * An operand of a binary connective, bracketed when it has to be.
+ *
+ * A quantifier's scope runs as far right as the text allows, so printing
+ * `(∀x:p(x))→q` without its brackets gives a string that reads back as
+ * `∀x:(p(x)→q)` — a different formula with a different prefix. Anything whose
+ * rightmost part is a quantifier body needs the brackets kept.
+ */
+function operand(formula: FoFormula): string {
+  const openEnded =
+    formula.kind === 'quantified' ||
+    (formula.kind === 'not' && needsBrackets(formula.body))
+  return openEnded ? `(${showFormula(formula)})` : showFormula(formula)
+}
+
+const needsBrackets = (formula: FoFormula): boolean =>
+  formula.kind === 'quantified' || (formula.kind === 'not' && needsBrackets(formula.body))
+
+/** One variable occurrence inside an atom, with where it prints. */
+export interface VariableSpot {
+  /** Index of its first character in `showFormula(formula)`. */
+  at: number
+  name: string
+  bound: boolean
+}
+
+/**
+ * The printed formula, and where every variable occurrence lands in it.
+ *
+ * Written here rather than in the game so there is one printer: a second walker
+ * that reproduces `showFormula`'s bracketing by hand drifts the moment the
+ * bracketing rule changes, and it did.
+ *
+ * The variable written beside a quantifier is the binder, not an occurrence,
+ * so it is not reported — which is how the notes read the tree too.
+ */
+export function renderWithPositions(formula: FoFormula): {
+  text: string
+  spots: VariableSpot[]
+} {
+  const spots: VariableSpot[] = []
+  let text = ''
+
+  const emit = (piece: string): void => {
+    text += piece
+  }
+
+  const walkTerm = (term: Term, bound: readonly string[]): void => {
+    if (isVar(term)) {
+      spots.push({ at: text.length, name: term.name, bound: bound.includes(term.name) })
+      emit(term.name)
+      return
+    }
+    emit(`${term.name}(`)
+    term.args.forEach((arg, index) => {
+      if (index > 0) emit(',')
+      walkTerm(arg, bound)
+    })
+    emit(')')
+  }
+
+  const walk = (node: FoFormula, bound: readonly string[]): void => {
+    switch (node.kind) {
+      case 'true':
+      case 'false':
+        emit(showFormula(node))
+        return
+      case 'atom':
+        if (node.args.length === 0) {
+          emit(node.predicate)
+          return
+        }
+        emit(`${node.predicate}(`)
+        node.args.forEach((arg, index) => {
+          if (index > 0) emit(',')
+          walkTerm(arg, bound)
+        })
+        emit(')')
+        return
+      case 'not':
+        emit('¬')
+        walk(node.body, bound)
+        return
+      case 'binary': {
+        emit('(')
+        const bracketLeft = needsBrackets(node.left)
+        if (bracketLeft) emit('(')
+        walk(node.left, bound)
+        if (bracketLeft) emit(')')
+        emit(CONNECTIVE_SYMBOL[node.connective])
+        const bracketRight = needsBrackets(node.right)
+        if (bracketRight) emit('(')
+        walk(node.right, bound)
+        if (bracketRight) emit(')')
+        emit(')')
+        return
+      }
+      case 'quantified':
+        emit(QUANTIFIER_SYMBOL[node.quantifier])
+        emit(node.variable)
+        emit(':')
+        walk(node.body, [...bound, node.variable])
+        return
+    }
+  }
+
+  walk(formula, [])
+  return { text, spots }
 }
 
 export function formulasEqual(left: FoFormula, right: FoFormula): boolean {
