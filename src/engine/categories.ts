@@ -743,6 +743,7 @@ const THEORIES_SECTIONS: Section[] = [
       {
         id: 'theory-membership',
         n: 59,
+        game: 'theory-membership',
         title: 'Does formula φ belong to theory T? Justify',
         source: 'exam26a Q4.2',
         stars: 1,
@@ -807,6 +808,7 @@ const THEORIES_SECTIONS: Section[] = [
       {
         id: 'automata',
         n: 65,
+        game: 'automata',
         title: 'Finite automata — which strings are accepted?',
         source: 'Exercise 11',
         stars: 1,

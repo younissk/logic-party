@@ -1,12 +1,32 @@
 import { describe, expect, it } from 'vitest'
 
-import { holdsIn, inTheory, isConsistent, modelsOf, unionClosureModels } from '@/logic'
+import {
+  ADDITION_AUTOMATON,
+  accepts,
+  chunk,
+  holdsIn,
+  inTheory,
+  isClosed,
+  isConsistent,
+  modelsOf,
+  tripleWord,
+  unionClosureModels,
+} from '@/logic'
 import { makeRng } from '@/logic/rng'
 import type { Difficulty } from '@/engine/types'
 import { CATALOGUE, CATALOGUE_FORMULAS, WORLD, parse } from './theoryWorld'
 import { belongs, closeItUpGame, modelsOfQuestion } from './closeItUp'
 import { theoryPropertiesGame, undecided } from './theoryProperties'
 import { isWitness, leftModels, rightModels, unionTroubleGame, witnessOf } from './unionTrouble'
+import {
+  belongs as belongsToTheory,
+  doesItBelongGame,
+  formulaOf,
+  outermost,
+  rowsOf,
+  verdictFrom,
+} from './doesItBelong'
+import { automatonOf, run as runGame, runTheMachineGame } from './runTheMachine'
 
 const DIFFICULTIES: readonly Difficulty[] = ['easy', 'medium', 'hard']
 
@@ -253,6 +273,137 @@ describe('Union Trouble', () => {
       )
       if (inLeft === undefined) continue
       expect(unionTroubleGame.check(question, { witness: inLeft }).correct).toBe(false)
+    }
+  })
+})
+
+describe('Does It Belong?', () => {
+  it.each(DIFFICULTIES)('marks the reference answer correct on %s', (difficulty) => {
+    for (let seed = 0; seed < 30; seed++) {
+      const question = draw(doesItBelongGame, difficulty, seed)
+      expect(doesItBelongGame.check(question, doesItBelongGame.solve(question)).correct).toBe(true)
+    }
+  })
+
+  it('the rows add up to what holdsIn says', () => {
+    for (const difficulty of DIFFICULTIES) {
+      for (let seed = 0; seed < 30; seed++) {
+        const question = draw(doesItBelongGame, difficulty, seed)
+        const { quantifier } = outermost(question)
+        expect(verdictFrom(quantifier, rowsOf(question))).toBe(belongsToTheory(question))
+      }
+    }
+  })
+
+  it('only ever asks about closed formulas', () => {
+    // A theory is a set of closed formulas, so a free variable would make the
+    // question meaningless.
+    for (const difficulty of DIFFICULTIES) {
+      for (let seed = 0; seed < 30; seed++) {
+        const question = draw(doesItBelongGame, difficulty, seed)
+        expect(isClosed(formulaOf(question))).toBe(true)
+      }
+    }
+  })
+
+  it('deals both verdicts', () => {
+    const seen = new Set<boolean>()
+    for (const difficulty of DIFFICULTIES) {
+      for (let seed = 0; seed < 40; seed++) seen.add(belongsToTheory(draw(doesItBelongGame, difficulty, seed)))
+    }
+    expect(seen).toEqual(new Set([true, false]))
+  })
+
+  it('exam26a question 4.2 comes out true', () => {
+    // ∃x∀y:(p(x)→p(f(y))) — take x=b, where p(x) is false, and the implication
+    // holds whatever y is.
+    const question = { world: 'swap', source: '∃x:∀y:(p(x)→p(f(y)))' }
+    expect(belongsToTheory(question)).toBe(true)
+    expect(rowsOf(question)).toEqual([false, true])
+  })
+
+  it('refuses one wrong row and names none of them', () => {
+    for (let seed = 0; seed < 20; seed++) {
+      const question = draw(doesItBelongGame, 'hard', seed)
+      const rows = [...rowsOf(question)]
+      rows[0] = !rows[0]
+      const verdict = doesItBelongGame.check(question, { rows })
+      expect(verdict.correct).toBe(false)
+      expect(verdict.message).not.toMatch(/true|false/)
+    }
+  })
+})
+
+describe('Run The Machine', () => {
+  it.each(DIFFICULTIES)('marks the reference answer correct on %s', (difficulty) => {
+    for (let seed = 0; seed < 30; seed++) {
+      const question = draw(runTheMachineGame, difficulty, seed)
+      expect(runTheMachineGame.check(question, runTheMachineGame.solve(question)).correct).toBe(true)
+    }
+  })
+
+  it('never deals a word that falls off the machine', () => {
+    // With no edge to take there is nothing to pick, so the run must stay
+    // alive to the end.
+    for (const difficulty of DIFFICULTIES) {
+      for (let seed = 0; seed < 40; seed++) {
+        const question = draw(runTheMachineGame, difficulty, seed)
+        expect(runGame(question).every((state) => state !== null)).toBe(true)
+      }
+    }
+  })
+
+  it('agrees with the module on acceptance', () => {
+    for (const difficulty of DIFFICULTIES) {
+      for (let seed = 0; seed < 40; seed++) {
+        const question = draw(runTheMachineGame, difficulty, seed)
+        const automaton = automatonOf(question)
+        const last = runGame(question)[question.letters.length - 1]
+        expect(automaton.accepting.includes(last as string)).toBe(
+          accepts(automaton, question.letters),
+        )
+      }
+    }
+  })
+
+  it('deals both accepted and rejected words', () => {
+    const seen = new Set<boolean>()
+    for (const difficulty of DIFFICULTIES) {
+      for (let seed = 0; seed < 40; seed++) {
+        const question = draw(runTheMachineGame, difficulty, seed)
+        seen.add(accepts(automatonOf(question), question.letters))
+      }
+    }
+    expect(seen).toEqual(new Set([true, false]))
+  })
+
+  it('the addition automaton accepts exactly the true sums', () => {
+    for (let x = 0; x < 8; x++) {
+      for (let y = 0; y < 8; y++) {
+        for (let claimed = 0; claimed < 16; claimed++) {
+          const letters = chunk(tripleWord(x, y, claimed, 5), 3)
+          expect(accepts(ADDITION_AUTOMATON, letters), `${x}+${y}=${claimed}`).toBe(
+            x + y === claimed,
+          )
+        }
+      }
+    }
+  })
+
+  it('refuses a wrong step without naming the state', () => {
+    for (let seed = 0; seed < 20; seed++) {
+      const question = draw(runTheMachineGame, 'medium', seed)
+      const path = [...runGame(question)]
+      const automaton = automatonOf(question)
+      const other = automaton.states.find((state) => state !== path[0])
+      if (other === undefined) continue
+      path[0] = other
+      const verdict = runTheMachineGame.check(question, path)
+      expect(verdict.correct).toBe(false)
+      // Word boundaries: the integer automaton's states are single letters.
+      for (const state of automaton.states) {
+        expect(verdict.message).not.toMatch(new RegExp(`\\b${state}\\b`))
+      }
     }
   })
 })

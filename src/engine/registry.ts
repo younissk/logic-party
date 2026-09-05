@@ -65,6 +65,8 @@ import { qeDenseGame } from '@/games/qeDense'
 import { closeItUpGame } from '@/games/closeItUp'
 import { theoryPropertiesGame } from '@/games/theoryProperties'
 import { unionTroubleGame } from '@/games/unionTrouble'
+import { doesItBelongGame } from '@/games/doesItBelong'
+import { runTheMachineGame } from '@/games/runTheMachine'
 import { interpretationGame } from '@/games/interpretationGame'
 import { termBuildGame } from '@/games/termBuild'
 import { termFlatGame } from '@/games/termFlat'
@@ -142,6 +144,8 @@ export const MINIGAMES: readonly AnyMinigame[] = [
   closeItUpGame,
   theoryPropertiesGame,
   unionTroubleGame,
+  doesItBelongGame,
+  runTheMachineGame,
 ]
 
 export function getMinigame(id: string): AnyMinigame | undefined {
