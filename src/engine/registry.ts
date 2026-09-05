@@ -67,6 +67,9 @@ import { theoryPropertiesGame } from '@/games/theoryProperties'
 import { unionTroubleGame } from '@/games/unionTrouble'
 import { doesItBelongGame } from '@/games/doesItBelong'
 import { runTheMachineGame } from '@/games/runTheMachine'
+import { sayItInTheLanguageGame } from '@/games/sayItInTheLanguage'
+import { pickThePictureGame } from '@/games/pickThePicture'
+import { beatTheChallengerGame } from '@/games/beatTheChallenger'
 import { interpretationGame } from '@/games/interpretationGame'
 import { termBuildGame } from '@/games/termBuild'
 import { termFlatGame } from '@/games/termFlat'
@@ -146,6 +149,9 @@ export const MINIGAMES: readonly AnyMinigame[] = [
   unionTroubleGame,
   doesItBelongGame,
   runTheMachineGame,
+  sayItInTheLanguageGame,
+  pickThePictureGame,
+  beatTheChallengerGame,
 ]
 
 export function getMinigame(id: string): AnyMinigame | undefined {

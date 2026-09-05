@@ -33,6 +33,7 @@ export * from './polynomial'
 export * from './automaton'
 export * from './dlo'
 export * from './theories'
+export * from './realFormula'
 
 /**
  * `arithmetic` is deliberately not re-exported.

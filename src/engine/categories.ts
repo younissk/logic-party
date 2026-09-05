@@ -826,6 +826,7 @@ const THEORIES_SECTIONS: Section[] = [
       {
         id: 'divides',
         n: 67,
+        game: 'divides',
         title: 'Write formulas with x|y and prime(p)',
         source: 'exam26a Q4.3 · exam26bA Q4.3 · Exercise 11',
         stars: 2,
@@ -858,6 +859,7 @@ const THEORIES_SECTIONS: Section[] = [
       {
         id: 'real-checkbox',
         n: 70,
+        game: 'real-checkbox',
         title: 'Which formulas are true in T(ℝ,=,+,*)?',
         source: 'Exercise 12',
         requires: ['tarski'],
@@ -866,6 +868,7 @@ const THEORIES_SECTIONS: Section[] = [
       {
         id: 'solution-set',
         n: 71,
+        game: 'solution-set',
         title: 'Pick the shaded solution-set picture for a formula',
         source: 'Exercise 12 · theories3',
         stars: 1,
