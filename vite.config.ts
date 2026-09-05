@@ -31,7 +31,14 @@ export default defineConfig({
      * in about four seconds; on a busy one a single case can pass five, and
      * the failure then reads as four broken tests rather than one loaded CPU.
      * Raised so the timeout catches a genuine hang and nothing else.
+     *
+     * Raised again for the equality-axioms search, which is the one genuinely
+     * expensive case: finding the *smallest* set of axioms that refutes means
+     * a saturation per subset. It takes about twenty seconds on its own and
+     * three times that when the rest of the suite is competing for cores, so a
+     * thirty-second limit failed only when the machine was busy — which is the
+     * one thing a timeout must not do.
      */
-    testTimeout: 30_000,
+    testTimeout: 120_000,
   },
 })
