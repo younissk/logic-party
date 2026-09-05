@@ -112,7 +112,9 @@ export function showReal(formula: RealFormula): string {
     case 'atom':
       return `${showPolynomial(formula.left)}${RELATION_SYMBOL[formula.relation]}${showPolynomial(formula.right)}`
     case 'not':
-      return `¬${showReal(formula.body)}`
+      // Always bracketed: `¬x^2≤y` reads as a comparison of ¬x² with y, which
+      // is not what it means.
+      return `¬(${showReal(formula.body)})`
     case 'and':
       return `(${showReal(formula.left)}∧${showReal(formula.right)})`
     case 'or':

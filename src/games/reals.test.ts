@@ -5,12 +5,14 @@ import { makeRng } from '@/logic/rng'
 import type { Difficulty } from '@/engine/types'
 import {
   GRID,
+  MIN_DISTANCE,
   REGIONS,
   cellCentre,
   pickThePictureGame,
   regionOf,
   sameShading,
   shading,
+  shadingDistance,
 } from './pickThePicture'
 import {
   CHALLENGES,
@@ -61,12 +63,24 @@ describe('Pick The Picture', () => {
   })
 
   it('never puts two indistinguishable pictures on the same board', () => {
+    // Not merely "not identical": two regions differing only inside a small
+    // lens are the same picture once shrunk to a thumbnail, and then the
+    // question is a coin flip.
     for (const difficulty of DIFFICULTIES) {
       for (let seed = 0; seed < 30; seed++) {
         const question = draw(pickThePictureGame, difficulty, seed)
-        const pictures = question.options.map((id) => shading(regionOf(id).formula).join(''))
-        expect(new Set(pictures).size).toBe(question.options.length)
         expect(question.options).toContain(question.formula)
+        for (let i = 0; i < question.options.length; i++) {
+          for (let j = i + 1; j < question.options.length; j++) {
+            const apart = shadingDistance(
+              regionOf(question.options[i] as string).formula,
+              regionOf(question.options[j] as string).formula,
+            )
+            expect(apart, `${question.options[i]} vs ${question.options[j]}`).toBeGreaterThanOrEqual(
+              MIN_DISTANCE,
+            )
+          }
+        }
       }
     }
   })

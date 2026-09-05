@@ -372,7 +372,7 @@ export const pureMeansBlockedGame = defineMinigame<PureQuestion, PureAnswer>({
     const answer = solve(question)
     return answer.literal === null
       ? 'Every literal here occurs in both forms, so no clause is blocked for free.'
-      : `${literalKey(answer.literal)} is pure, so no clause contains its complement and Definition 2.33 holds vacuously for the ${answer.clauses.length} clause(s) containing it.`
+      : `${literalKey(answer.literal)} is pure, so no clause contains its complement and Definition 2.33 holds vacuously for the ${answer.clauses.length} clause${answer.clauses.length === 1 ? '' : 's'} containing it.`
   },
   Screen,
   Guide: PureMeansBlockedGuide,

@@ -121,8 +121,15 @@ export function showArithFormula(formula: ArithFormula): string {
       return `${showArith(formula.left)}|${showArith(formula.right)}`
     case 'prime':
       return `prime(${showArith(formula.of)})`
-    case 'not':
-      return `¬${showArithFormula(formula.body)}`
+    case 'not': {
+      // A negated comparison has to be bracketed: `¬p^2|n` reads as "¬(p²)
+      // divides n", which is not what it means. `prime(p)` is safe, since the
+      // brackets are already there.
+      const body = showArithFormula(formula.body)
+      return formula.body.kind === 'prime' || body.startsWith('(')
+        ? `¬${body}`
+        : `¬(${body})`
+    }
     case 'and':
       return `(${showArithFormula(formula.left)} ∧ ${showArithFormula(formula.right)})`
     case 'or':

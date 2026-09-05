@@ -9,7 +9,7 @@
 import { Callout, GuideSection, Prose, Sym } from '@/ui/guide'
 import { Card } from '@/ui/primitives'
 import { FoText } from '@/ui/FoText'
-import { leavesOf, prefixOf, formulaOf, type QeFiniteQuestion } from './qeFinite'
+import { expansionText, type QeFiniteQuestion } from './qeFinite'
 
 const question = (source: string, universe: string[], predicates: Record<string, number>): QeFiniteQuestion => ({
   source,
@@ -25,29 +25,6 @@ const EXAMPLES: readonly QeFiniteQuestion[] = [
   question('∀x:∃y:p(x,y)', ['a', 'b'], { p: 2 }),
   question('∃x:∀y:p(x,y)', ['a', 'b'], { p: 2 }),
 ]
-
-const JOIN = { forall: '∧', exists: '∨' } as const
-
-/** The expansion, grouped the way the quantifier prefix groups it. */
-function expansion(item: QeFiniteQuestion): string {
-  const { quantifiers } = prefixOf(formulaOf(item))
-  const leaves = leavesOf(item)
-  const size = item.universe.length
-
-  let level = quantifiers.length - 1
-  let parts = leaves
-  while (level >= 0) {
-    const symbol = JOIN[quantifiers[level]!.quantifier]
-    const grouped: string[] = []
-    for (let start = 0; start < parts.length; start += size) {
-      const slice = parts.slice(start, start + size)
-      grouped.push(slice.length === 1 ? slice[0]! : `(${slice.join(` ${symbol} `)})`)
-    }
-    parts = grouped
-    level -= 1
-  }
-  return parts[0] ?? ''
-}
 
 export function QeFiniteGuide() {
   return (
@@ -102,7 +79,7 @@ export function QeFiniteGuide() {
                       {'}'}
                     </td>
                     <td className="px-2 py-1">
-                      <FoText text={expansion(item)} className="font-bold" />
+                      <FoText text={expansionText(item)} className="font-bold" />
                     </td>
                   </tr>
                 ))}

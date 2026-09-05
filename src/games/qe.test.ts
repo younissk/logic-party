@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { eliminateConjunction } from '@/logic'
 import { makeRng } from '@/logic/rng'
 import type { Difficulty } from '@/engine/types'
-import { qeFiniteGame, leavesOf, prefixOf, formulaOf, tuples } from './qeFinite'
+import { expansionText, qeFiniteGame, leavesOf, prefixOf, formulaOf, tuples } from './qeFinite'
 import { conjunctsOf, qeDenseGame, parseConjunct, reference } from './qeDense'
 
 const DIFFICULTIES: readonly Difficulty[] = ['easy', 'medium', 'hard']
@@ -214,5 +214,46 @@ describe('Squeeze It Out', () => {
     expect(new Set(reference(question).atoms)).toEqual(
       new Set(['u<y', 'u<z', 'v<y', 'v<z']),
     )
+  })
+})
+
+describe('the expansion text', () => {
+  it('groups a mixed prefix rather than flattening it', () => {
+    // ∃x∀y over {a,b} is a disjunction of conjunctions. Joining every leaf
+    // with one connective would silently state a different formula.
+    const question = {
+      source: '∃x:∀y:p(x,y)',
+      predicates: { p: 2 },
+      functions: { a: 0, b: 0 },
+      universe: ['a', 'b'],
+      bank: [],
+    }
+    expect(expansionText(question)).toBe(
+      '((p(a(),a()) ∧ p(a(),b())) ∨ (p(b(),a()) ∧ p(b(),b())))',
+    )
+  })
+
+  it('groups the other way for the other prefix', () => {
+    const question = {
+      source: '∀x:∃y:p(x,y)',
+      predicates: { p: 2 },
+      functions: { a: 0, b: 0 },
+      universe: ['a', 'b'],
+      bank: [],
+    }
+    expect(expansionText(question)).toBe(
+      '((p(a(),a()) ∨ p(a(),b())) ∧ (p(b(),a()) ∨ p(b(),b())))',
+    )
+  })
+
+  it('uses the one connective when there is one quantifier', () => {
+    const question = {
+      source: '∀x:p(x)',
+      predicates: { p: 1 },
+      functions: { a: 0, b: 0, c: 0 },
+      universe: ['a', 'b', 'c'],
+      bank: [],
+    }
+    expect(expansionText(question)).toBe('(p(a()) ∧ p(b()) ∧ p(c()))')
   })
 })

@@ -122,6 +122,24 @@ export function shading(formula: RealFormula): boolean[] {
 export const sameShading = (left: RealFormula, right: RealFormula): boolean =>
   shading(left).join('') === shading(right).join('')
 
+/** How many of the grid's cells the two regions disagree about. */
+export function shadingDistance(left: RealFormula, right: RealFormula): number {
+  const one = shading(left)
+  const two = shading(right)
+  return one.reduce((total, cell, index) => total + (cell === two[index] ? 0 : 1), 0)
+}
+
+/**
+ * How different two options have to look.
+ *
+ * Merely *not identical* is not enough. Several of these regions differ only
+ * inside a small lens, and at the size the pictures are drawn that is a pair
+ * of options nobody can tell apart — which makes the question a coin flip
+ * rather than a reading exercise. Six per cent of the grid is about the
+ * smallest difference that survives being shrunk to a thumbnail.
+ */
+export const MIN_DISTANCE = Math.round(GRID * GRID * 0.06)
+
 // ---------------------------------------------------------------------------
 // Generation
 // ---------------------------------------------------------------------------
@@ -137,7 +155,11 @@ function generate({ rng, difficulty }: GenerateContext): PictureQuestion {
     let clash = false
     for (let i = 0; i < chosen.length && !clash; i++) {
       for (let j = i + 1; j < chosen.length; j++) {
-        if (sameShading((chosen[i] as Region).formula, (chosen[j] as Region).formula)) clash = true
+        const apart = shadingDistance(
+          (chosen[i] as Region).formula,
+          (chosen[j] as Region).formula,
+        )
+        if (apart < MIN_DISTANCE) clash = true
       }
     }
     if (clash) continue
@@ -343,8 +365,12 @@ function Screen({ question, submit, locked }: MinigameScreenProps<PictureQuestio
 
       {locked && (
         <Pop className="mt-3 rounded-2xl bg-card-shade p-3 text-sm font-medium text-ink-soft">
-          Picture {wanted + 1}. An implication shades everything where its premise fails, which is
-          why its solution set is usually far larger than it looks like it should be.
+          Picture {wanted + 1}.{' '}
+          {formula.kind === 'implies'
+            ? 'An implication shades everything where its premise fails, which is why its solution set is usually far larger than it looks like it should be.'
+            : formula.kind === 'not'
+              ? 'A negation shades exactly what the formula underneath does not.'
+              : 'Every point is decided on its own, by substituting its coordinates.'}
         </Pop>
       )}
 

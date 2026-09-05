@@ -88,6 +88,32 @@ export function tuples(question: QeFiniteQuestion): Substitution[] {
   return assignments
 }
 
+const CONNECTIVE_FOR = { forall: '∧', exists: '∨' } as const
+
+/**
+ * The whole expansion as text, grouped the way the prefix groups it.
+ *
+ * Joining every leaf with one connective would be wrong for a mixed prefix:
+ * ∃x∀y over {a,b} is (φ(a,a) ∧ φ(a,b)) ∨ (φ(b,a) ∧ φ(b,b)), and flattening it
+ * changes the formula.
+ */
+export function expansionText(question: QeFiniteQuestion): string {
+  const { quantifiers } = prefixOf(formulaOf(question))
+  const size = question.universe.length
+  let parts = leavesOf(question)
+
+  for (let level = quantifiers.length - 1; level >= 0; level--) {
+    const symbol = CONNECTIVE_FOR[(quantifiers[level] as { quantifier: 'forall' | 'exists' }).quantifier]
+    const grouped: string[] = []
+    for (let start = 0; start < parts.length; start += size) {
+      const slice = parts.slice(start, start + size)
+      grouped.push(slice.length === 1 ? (slice[0] as string) : `(${slice.join(` ${symbol} `)})`)
+    }
+    parts = grouped
+  }
+  return parts[0] ?? ''
+}
+
 /** The leaves of the expansion, printed, in order. */
 export function leavesOf(question: QeFiniteQuestion): string[] {
   const { matrix } = prefixOf(formulaOf(question))
@@ -508,12 +534,7 @@ export const qeFiniteGame = defineMinigame<QeFiniteQuestion, QeFiniteAnswer>({
   check,
   solve,
   questionKey: (question) => question.source,
-  explain: (question) => {
-    const answer = solve(question)
-    return `${question.source} expands to ${answer.leaves.join(
-      ` ${CONNECTIVE_SYMBOL[answer.connectives[answer.connectives.length - 1] ?? 'and']} `,
-    )}, grouped by the outer quantifier.`
-  },
+  explain: (question) => `${question.source} expands to ${expansionText(question)}.`,
   Screen,
   Guide: QeFiniteGuide,
 })

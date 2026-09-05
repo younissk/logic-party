@@ -407,7 +407,15 @@ export const doesItBelongGame = defineMinigame<BelongQuestion, BelongAnswer>({
     const { quantifier, variable } = outermost(question)
     const rows = rowsOf(question)
     const shown = world.labels.map((label, index) => `${variable}=${label}: ${rows[index]}`).join(', ')
-    return `${shown}. ${quantifier === 'forall' ? 'All' : 'Some'} of those, so the formula is ${belongs(question) ? '' : 'not '}in the theory.`
+    const needed =
+      quantifier === 'forall'
+        ? belongs(question)
+          ? 'every row is true'
+          : 'not every row is true'
+        : belongs(question)
+          ? 'one row is true'
+          : 'no row is true'
+    return `${shown} — ${needed}, so the formula is ${belongs(question) ? '' : 'not '}in the theory.`
   },
   Screen,
   Guide: DoesItBelongGuide,

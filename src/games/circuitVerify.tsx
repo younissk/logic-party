@@ -438,7 +438,7 @@ function Screen({
           </div>
           {!finished && (
             <p className="mt-1 text-center text-xs font-medium text-ink-soft">
-              {live.length} rule{live.length === 1 ? '' : 's'} still applies.
+              {live.length === 1 ? '1 rule still applies.' : `${live.length} rules still apply.`}
             </p>
           )}
         </>
