@@ -71,6 +71,7 @@ export function Play() {
     const bestTime = getBestTime(game.id, difficulty, progress)
     const questions = game.sprintQuestions ?? DEFAULT_SPRINT_QUESTIONS
     const seconds = game.roundSeconds ?? DEFAULT_ROUND_SECONDS
+    const penalty = game.sprintPenaltySeconds ?? SCORING.sprintPenaltySeconds
 
     return (
       <div className="flex flex-col gap-4">
@@ -114,7 +115,7 @@ export function Play() {
           </p>
           <p className="mt-2 text-sm font-semibold text-ink-soft">
             {isSprint
-              ? `${questions} questions against a stopwatch. You cannot move on until the answer is right, and every wrong attempt adds ${SCORING.sprintPenaltySeconds} seconds. Beat your own time.`
+              ? `${questions} questions against a stopwatch. You cannot move on until the answer is right, and every wrong attempt adds ${penalty} seconds. Beat your own time.`
               : `${seconds} seconds · +100 per correct answer, −50 for a wrong one, combo bonus for a streak. Beat your own record.`}
           </p>
         </Card>

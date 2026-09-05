@@ -155,6 +155,16 @@ export interface Minigame<Question = unknown, Answer = unknown> {
   /** sprint: how many questions to finish. */
   readonly sprintQuestions?: number
 
+  /**
+   * sprint: seconds added per wrong submission, overriding SCORING.
+   *
+   * Raise it for a minigame whose answer space is small enough to brute-force.
+   * Sprint blocks you until the answer is right, so on a three-way choice you
+   * are always at most two wrong guesses from the truth; the penalty has to
+   * cost more than working the question out, or guessing wins.
+   */
+  readonly sprintPenaltySeconds?: number
+
   generate(context: GenerateContext): Question
   /** Must be pure and total — a wrong answer is a verdict, never an exception. */
   check(question: Question, answer: Answer): Verdict

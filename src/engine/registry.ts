@@ -7,6 +7,7 @@
 import type { AnyMinigame, Minigame, Topic } from './types'
 import type { Category } from './categories'
 import { categoriesOf } from './categories'
+import { propertyGame } from '@/games/property'
 import { truthTableGame } from '@/games/truthTable'
 
 /** Identity function that keeps a minigame's Question/Answer types inferred. */
@@ -16,7 +17,7 @@ export function defineMinigame<Question, Answer>(
   return game
 }
 
-export const MINIGAMES: readonly AnyMinigame[] = [truthTableGame]
+export const MINIGAMES: readonly AnyMinigame[] = [truthTableGame, propertyGame]
 
 export function getMinigame(id: string): AnyMinigame | undefined {
   return MINIGAMES.find((game) => game.id === id)

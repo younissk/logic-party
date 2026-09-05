@@ -113,6 +113,18 @@ body {
   border-color: var(--color-ink-soft);
 }
 
+/*
+ * A locked control that is still *saying* something — the revealed answer on a
+ * multiple choice — opts out of the greying above. Without this the correct
+ * option is desaturated to the same grey as the wrong ones the moment the
+ * round locks, which is exactly when it needs to stand out most.
+ */
+.chunky:disabled.revealed {
+  filter: none;
+  box-shadow: 0 5px 0 var(--color-ink);
+  border-color: var(--color-ink);
+}
+
 /* Board space: the round token used for truth values. */
 .space {
   border: 3px solid var(--color-ink);

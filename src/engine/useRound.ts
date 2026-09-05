@@ -93,6 +93,7 @@ export function useRound(options: RoundOptions): RoundState {
       ? (options.questionCount ?? game.sprintQuestions ?? DEFAULT_SPRINT_QUESTIONS)
       : null
   const roundSeconds = game.roundSeconds ?? DEFAULT_ROUND_SECONDS
+  const sprintPenalty = game.sprintPenaltySeconds ?? SCORING.sprintPenaltySeconds
 
   const [seed, setSeed] = useState(options.seed)
   const [index, setIndex] = useState(0)
@@ -238,7 +239,7 @@ export function useRound(options: RoundOptions): RoundState {
         ? Math.min(SCORING.maxComboBonus, Math.max(0, nextCombo - 1) * SCORING.comboStep)
         : 0
       const delta = result.correct ? SCORING.correct + comboBonus : -SCORING.wrong
-      const penalty = requireCorrect && !result.correct ? SCORING.sprintPenaltySeconds : 0
+      const penalty = requireCorrect && !result.correct ? sprintPenalty : 0
 
       setVerdict(result)
       setLastAward({ points: delta, comboBonus, combo: nextCombo, penaltySeconds: penalty })
