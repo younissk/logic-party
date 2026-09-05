@@ -3,6 +3,7 @@ import {
   CATEGORY_BY_ID,
   sectionProgress,
   type Category as CategoryId,
+  type Priority,
   type Section,
   type SyllabusItem,
 } from '@/engine/categories'
@@ -20,6 +21,42 @@ import {
 } from '@/store/progress'
 
 const isCategory = (value: string): value is CategoryId => value in CATEGORY_BY_ID
+
+/**
+ * The plan's own markers, kept visible.
+ *
+ * A red item is one where marks were actually dropped, which outranks how
+ * often it comes up — so it has to read louder than the frequency does.
+ */
+const PRIORITY_STYLE: Readonly<Record<Priority, string>> = {
+  lost: 'bg-space-red text-white',
+  refresh: 'bg-coin text-ink',
+  skim: 'bg-card-shade text-ink-soft',
+}
+
+const PRIORITY_SHORT: Readonly<Record<Priority, string>> = {
+  lost: 'lost marks',
+  refresh: 'refresh',
+  skim: 'skim',
+}
+
+function Markers({ item }: { item: SyllabusItem }) {
+  if (item.priority === undefined) return null
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span
+        className={`rounded-full px-2 py-0.5 text-[0.65rem] font-bold uppercase tracking-wider ${PRIORITY_STYLE[item.priority]}`}
+      >
+        {PRIORITY_SHORT[item.priority]}
+      </span>
+      {item.stars !== undefined && item.stars > 0 && (
+        <span className="text-[0.65rem] font-bold text-coin-deep" title={`In ${item.stars + 1} past exams`}>
+          {'★'.repeat(item.stars)}
+        </span>
+      )}
+    </span>
+  )
+}
 
 export function Category() {
   const { categoryId = '' } = useParams()
@@ -134,8 +171,9 @@ function GameCard({
           {game.icon}
         </span>
         <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold text-ink-soft">
-            {item.n === undefined ? 'Warm-up' : `${item.n} · ${item.source}`}
+          <p className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-semibold text-ink-soft">
+            <span>{item.n === undefined ? 'Warm-up' : `${item.n} · ${item.source}`}</span>
+            <Markers item={item} />
           </p>
           <h3 className="text-lg font-bold">{game.title}</h3>
           <p className="mt-0.5 text-sm font-medium text-ink-soft">{game.tagline}</p>
@@ -187,7 +225,10 @@ function PlannedItem({ item }: { item: SyllabusItem }) {
       </span>
       <div className="min-w-0 flex-1">
         <p className="text-[0.95rem] font-bold text-ink-soft">{item.title}</p>
-        <p className="mt-0.5 text-xs font-medium text-ink-soft">{item.source}</p>
+        <p className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-ink-soft">
+          <span>{item.source}</span>
+          <Markers item={item} />
+        </p>
       </div>
       <span className="mt-0.5 shrink-0 text-xs font-bold uppercase tracking-wider text-ink-soft">
         soon

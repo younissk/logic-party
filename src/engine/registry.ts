@@ -8,6 +8,7 @@ import type { AnyMinigame, Minigame, Topic } from './types'
 import type { Category } from './categories'
 import { categoriesOf } from './categories'
 import { bcpGame } from '@/games/bcpFixpoint'
+import { blockedClausesGame } from '@/games/blockedClauses'
 import { cnfPipelineGame } from '@/games/cnfPipeline'
 import { conflictClauseGame } from '@/games/conflictClause'
 import { dpGame } from '@/games/dpEliminate'
@@ -18,6 +19,7 @@ import { learnedClauseGame } from '@/games/learnedClause'
 import { modelCountGame } from '@/games/modelCount'
 import { propertyGame } from '@/games/property'
 import { refutationGame } from '@/games/refutation'
+import { rupGame } from '@/games/rupProof'
 import { resolventsGame } from '@/games/resolvents'
 import { tseitinGame } from '@/games/tseitin'
 import { truthTableGame } from '@/games/truthTable'
@@ -44,6 +46,8 @@ export const MINIGAMES: readonly AnyMinigame[] = [
   dpllGame,
   conflictClauseGame,
   learnedClauseGame,
+  rupGame,
+  blockedClausesGame,
 ]
 
 export function getMinigame(id: string): AnyMinigame | undefined {

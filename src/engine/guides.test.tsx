@@ -100,14 +100,32 @@ describe('categories', () => {
   })
 
   it('numbers the study plan without gaps or repeats', () => {
+    // The plan numbers 1–75 across the whole course rather than restarting per
+    // chapter, so this is one sequence, checked as one.
+    const numbers = CATEGORIES.flatMap((category) => syllabusItems(category.id))
+      .map((item) => item.n)
+      .filter((n): n is number => n !== undefined)
+
+    expect(numbers).toEqual([...numbers].sort((a, b) => a - b))
+    expect(new Set(numbers).size).toBe(numbers.length)
+    expect(numbers).toEqual(numbers.map((_, index) => index + 1))
+  })
+
+  it('marks every numbered item with a priority', () => {
+    // The markers are the whole point of the plan; an item without one would
+    // quietly drop out of "what to revise first".
     for (const category of CATEGORIES) {
-      const numbers = syllabusItems(category.id)
-        .map((item) => item.n)
-        .filter((n): n is number => n !== undefined)
-      if (numbers.length === 0) continue
-      expect(numbers).toEqual([...numbers].sort((a, b) => a - b))
-      expect(new Set(numbers).size).toBe(numbers.length)
-      expect(numbers).toEqual(numbers.map((_, index) => index + 1))
+      for (const item of syllabusItems(category.id)) {
+        if (item.n === undefined) continue
+        expect(item.priority, `${item.id}`).toBeDefined()
+      }
+    }
+  })
+
+  it('plans every chapter, not only the one with minigames', () => {
+    for (const category of CATEGORIES) {
+      expect(CATEGORY_BY_ID[category.id].sections, category.id).toBeDefined()
+      expect(syllabusItems(category.id).length, category.id).toBeGreaterThan(0)
     }
   })
 
@@ -187,6 +205,12 @@ describe('categories', () => {
     expect(propositional.built).toBe(
       MINIGAMES.filter((game) => categoriesOf(game.topics).includes('propositional')).length,
     )
+    // The other three are planned out and entirely unbuilt, which is exactly
+    // what the plan says about where the work is.
+    for (const category of ['equational', 'first-order', 'fol-theories'] as const) {
+      expect(sectionProgress(category).built, category).toBe(0)
+      expect(sectionProgress(category).total, category).toBeGreaterThan(0)
+    }
   })
 
   it('describes what an empty category is for', () => {

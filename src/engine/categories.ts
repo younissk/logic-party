@@ -14,6 +14,17 @@ import type { Topic } from './types'
 
 export type Category = 'propositional' | 'equational' | 'first-order' | 'fol-theories'
 
+export type Priority = 'lost' | 'refresh' | 'skim'
+
+export const PRIORITY_LABELS: Readonly<Record<Priority, string>> = {
+  lost: 'Lost marks here',
+  refresh: 'Refresh',
+  skim: 'Skim',
+}
+
+/** Ordered worst-first, which is the order to revise in. */
+export const PRIORITIES: readonly Priority[] = ['lost', 'refresh', 'skim']
+
 /**
  * One kind of exercise the exam asks for.
  *
@@ -35,6 +46,17 @@ export interface SyllabusItem {
   source: string
   /** Minigame id, when one exists. */
   game?: string
+  /**
+   * How much attention this needs, from the exam plan.
+   *
+   * 'lost'    marks you actually dropped — highest priority whatever the
+   *           frequency.
+   * 'refresh' comes up often and the recorded work says you are solid.
+   * 'skim'    lower frequency or already reliable.
+   */
+  priority?: Priority
+  /** How many past exams it appeared in, beyond one. */
+  stars?: number
   /**
    * Items you need first, by id.
    *
@@ -91,34 +113,59 @@ export interface CategoryInfo {
  * and is stable: a warm-up added later goes in unnumbered rather than pushing
  * everything down.
  */
+/**
+ * The course as an exam plan, item by item.
+ *
+ * Numbering, wording, sources and priority markers all come from the plan
+ * rather than from me, so the app and the revision list cannot drift apart.
+ * Numbers run 1–75 across the whole course, not per chapter, because that is
+ * how the plan refers to them.
+ */
 const PROPOSITIONAL_SECTIONS: Section[] = [
   {
     letter: 'A',
-    title: 'Semantics & basics',
+    title: 'Semantics',
     items: [
       {
         id: 'truth-tables',
         title: 'Truth tables — evaluate a formula row by row',
         source: 'ln §2.1 · warm-up',
         game: 'truth-table',
+        priority: 'skim',
       },
       {
         id: 'properties',
         n: 1,
-        title: 'Property classification — satisfiable, valid, refutable, unsatisfiable',
-        source: 'Exercise 1 · ln §2.1',
+        title: 'Satisfiable / valid / refutable / unsatisfiable',
+        source: 'Def. 2.6, Thm 2.8 · Exercise 1',
         game: 'property-check',
+        priority: 'skim',
         requires: ['truth-tables'],
-        why: 'Every property is a statement about a formula\u2019s column. You have to be able to fill one in first.',
+        why: 'Every property is a statement about a formula’s column. You have to be able to fill one in first.',
       },
       {
         id: 'model-count',
         n: 2,
-        title: 'Counting models of a CNF',
-        source: 'exam25a Q1.1a · Exercise 1 · ln §2.1',
+        title: 'Counting models',
+        source: 'exam25a Q1.1a · Exercise 1',
         game: 'model-count',
+        priority: 'skim',
         requires: ['properties'],
-        why: '\u201cHow many models\u201d is meaningless until \u201cany at all\u201d is settled.',
+        why: '“How many models” is meaningless until “any at all” is settled.',
+      },
+      {
+        id: 'entailment',
+        n: 3,
+        title: 'Entailment and equivalence (A→B ≡ ¬A∨B)',
+        source: 'Def. 2.9–2.11 · Exercise 1',
+        priority: 'skim',
+      },
+      {
+        id: 'encoding',
+        n: 4,
+        title: 'Encoding a problem into CNF (graph colouring)',
+        source: 'Exercise 1 Q4 · limboole',
+        priority: 'skim',
       },
     ],
   },
@@ -128,28 +175,31 @@ const PROPOSITIONAL_SECTIONS: Section[] = [
     items: [
       {
         id: 'cnf',
-        n: 3,
-        title: 'Naive CNF transformation — De Morgan and distributivity',
-        source: 'ln §2.2',
+        n: 5,
+        title: 'Naive CNF — ↔ then → then ¬ then distribute',
+        source: 'ln §2.2 · Example 2.16',
         game: 'cnf-pipeline',
+        priority: 'skim',
         requires: ['truth-tables'],
         why: 'Every step of the pipeline is an equivalence. You need to be able to check one.',
       },
       {
         id: 'tseitin',
-        n: 4,
+        n: 6,
         title: 'Tseitin transformation — which clauses appear',
-        source: 'Exercise 2 · ln Algorithm 2.19',
+        source: 'Alg. 2.19 · Exercise 2',
         game: 'tseitin',
+        priority: 'refresh',
         requires: ['cnf'],
         why: 'Tseitin exists to dodge the distribution blowup. Feel the blowup first or it looks like pointless extra machinery.',
       },
       {
         id: 'sat-equivalence',
-        n: 5,
+        n: 7,
         title: 'Equivalent vs. satisfiability-equivalent',
-        source: 'ln Definition 2.21',
+        source: 'Def. 2.21 · Quiz 1',
         game: 'equivalence',
+        priority: 'refresh',
         requires: ['model-count', 'tseitin'],
         why: 'The distinction is about model sets, and its headline example is Tseitin.',
       },
@@ -161,30 +211,48 @@ const PROPOSITIONAL_SECTIONS: Section[] = [
     items: [
       {
         id: 'resolvents',
-        n: 6,
-        title: 'Compute all resolvents, including tautological ones',
-        source: 'exam25a Q1.1b · ln Definition 2.22',
+        n: 8,
+        title: 'Compute all resolvents, including tautological',
+        source: 'exam25a Q1.1b',
         game: 'resolvents',
+        priority: 'refresh',
         requires: ['cnf'],
         why: 'Resolution works on clauses. You need to be able to produce clauses.',
       },
       {
         id: 'derivable',
-        n: 7,
-        title: 'Is clause X derivable?',
+        n: 9,
+        title: 'Is clause X derivable? Multi-step',
         source: 'exam26a and exam26bA Q1.1',
         game: 'derivable',
+        priority: 'refresh',
+        stars: 1,
         requires: ['resolvents', 'model-count'],
         why: 'The first move is BCP to decide satisfiability; the second is the resolution rule.',
       },
       {
+        id: 'one-step',
+        n: 10,
+        title: 'Derivable in one step only',
+        source: 'Exercise 2',
+        priority: 'refresh',
+      },
+      {
         id: 'refutation',
-        n: 8,
+        n: 11,
         title: 'Build a resolution refutation',
-        source: 'ln §2.3',
+        source: 'ln §2.3 · Example 2.26',
         game: 'refutation',
+        priority: 'refresh',
         requires: ['resolvents'],
         why: 'A refutation is a chain of single resolution steps.',
+      },
+      {
+        id: 'entailment-refutation',
+        n: 12,
+        title: 'Prove an entailment by refutation',
+        source: 'Exercise 2',
+        priority: 'refresh',
       },
     ],
   },
@@ -194,46 +262,52 @@ const PROPOSITIONAL_SECTIONS: Section[] = [
     items: [
       {
         id: 'bcp',
-        n: 9,
-        title: 'BCP until fixpoint — what formula remains',
-        source: 'exam25a Q1.1c · ln Definition 2.39',
+        n: 13,
+        title: 'BCP until fixpoint — name the three outcomes',
+        source: 'Def. 2.39 · exam25a Q1.1c · Exercise 3',
         game: 'bcp',
+        priority: 'refresh',
         requires: ['model-count'],
         why: 'Propagation is already the first step of counting models.',
       },
       {
         id: 'dp',
-        n: 10,
-        title: 'DP procedure — variable elimination, decide SAT or UNSAT',
-        source: 'exam26a and exam26bA Q1.2',
+        n: 14,
+        title: 'DP procedure — variable elimination',
+        source: 'exam26a and exam26bA Q1.2 · Exercise 2',
         game: 'dp',
+        priority: 'refresh',
+        stars: 1,
         requires: ['resolvents'],
         why: 'Eliminating a variable means resolving every pair that clashes on it.',
       },
       {
         id: 'dpll',
-        n: 11,
-        title: 'DPLL decision tree — build it, count leaves',
-        source: 'Exercise 3 · ln §2.4',
+        n: 15,
+        title: 'DPLL decision tree — count the leaves',
+        source: 'ln §2.4 · Exercise 3',
         game: 'dpll',
+        priority: 'refresh',
         requires: ['bcp'],
         why: 'DPLL is decide, then propagate. The propagation half has to be automatic.',
       },
       {
         id: 'dpll-refutation',
-        n: 12,
+        n: 16,
         title: 'Refutation matching a given DPLL tree',
         source: 'exam25a Q1.2',
         game: 'conflict-clause',
+        priority: 'refresh',
         requires: ['dpll', 'refutation'],
         why: 'The hybrid: it asks you to read a tree and write the resolution proof it corresponds to.',
       },
       {
         id: 'cdcl',
-        n: 13,
-        title: 'CDCL and learned clauses — conflict analysis',
-        source: 'ln §2.4 · Example 2.45',
+        n: 17,
+        title: 'CDCL and learned clauses',
+        source: 'Examples 2.44–2.45',
         game: 'learned-clause',
+        priority: 'skim',
         requires: ['dpll'],
         why: 'CDCL is DPLL that learns from its conflicts.',
       },
@@ -244,20 +318,530 @@ const PROPOSITIONAL_SECTIONS: Section[] = [
     title: 'Certificates',
     items: [
       {
-        id: 'rup',
-        n: 14,
-        title: 'RUP proof — extend the formula step by step to ⊥',
-        source: 'exam26a and exam26bA Q1.3 · Exercise 3 · ln §2.5',
+        id: 'rup-proof',
+        n: 18,
+        title: 'RUP proof — build the sequence to ⊥',
+        source: 'exam26a and exam26bA Q1.3 · Exercise 3',
+        priority: 'lost',
+        stars: 1,
+      },
+      {
+        id: 'rup-check',
+        n: 19,
+        title: 'RUP checkbox — does clause C have the property?',
+        source: 'Quiz 1',
+        game: 'rup',
+        priority: 'lost',
         requires: ['bcp', 'refutation'],
         why: 'A RUP check is BCP on the formula with the candidate clause negated.',
       },
       {
+        id: 'blocked-named',
+        n: 20,
+        title: 'Blocked clause with a named blocking literal',
+        source: 'Exercise 3 · Quiz 1',
+        priority: 'lost',
+      },
+      {
         id: 'bce',
-        n: 15,
-        title: 'Blocked clause elimination — prove SAT by deleting',
+        n: 21,
+        title: 'Blocked clause elimination to prove SAT',
         source: 'exam25a Q1.3 · exam26bA bonus',
+        game: 'blocked-clauses',
+        priority: 'lost',
         requires: ['resolvents', 'sat-equivalence'],
         why: 'Deleting a clause changes the model set, so it is only legal because satisfiability survives.',
+      },
+    ],
+  },
+]
+
+const EQUATIONAL_SECTIONS: Section[] = [
+  {
+    letter: 'A',
+    title: 'Terms',
+    items: [
+      {
+        id: 'term-parse',
+        n: 22,
+        title: 'Parse a term from a string with no commas or parens',
+        source: 'Exercise 4 · Collection Q11',
+        priority: 'lost',
+        stars: 1,
+      },
+      {
+        id: 'term-properties',
+        n: 23,
+        title: 'Ground terms; when T(F, a, V) is infinite',
+        source: 'Exercise 4 · ln §3.1',
+        priority: 'skim',
+      },
+      {
+        id: 'interpretation',
+        n: 24,
+        title: 'Does an equation hold under a concrete interpretation?',
+        source: 'Collection Q12 · eq1',
+        priority: 'lost',
+        stars: 1,
+      },
+    ],
+  },
+  {
+    letter: 'B',
+    title: 'Substitution and unification',
+    items: [
+      {
+        id: 'composition',
+        n: 25,
+        title: 'Substitution composition σ∘σ′ — simultaneous, not sequential',
+        source: 'ln §3.2 · exam26bA Q2.1',
+        priority: 'refresh',
+      },
+      {
+        id: 'more-general',
+        n: 26,
+        title: 'More general than — t ≤ t′',
+        source: 'exam25a Q2.1 · Exercise 5',
+        priority: 'refresh',
+        stars: 1,
+      },
+      {
+        id: 'matching',
+        n: 27,
+        title: 'Matching algorithm',
+        source: 'Alg. 3.8',
+        priority: 'skim',
+      },
+      {
+        id: 'mgu',
+        n: 28,
+        title: 'Most general unifier, or prove not unifiable',
+        source: 'exam25a Q2.2 · exam26bA Q2.3',
+        priority: 'refresh',
+        stars: 2,
+      },
+      {
+        id: 'unifiable-checkbox',
+        n: 29,
+        title: 'Unifiable / incomparable over a term set',
+        source: 'Exercise 5',
+        priority: 'refresh',
+      },
+      {
+        id: 'occurs-check',
+        n: 30,
+        title: 'Occurs check — f(x) vs f(f(x))',
+        source: 'ln §3.2',
+        priority: 'skim',
+      },
+    ],
+  },
+  {
+    letter: 'C',
+    title: 'Equational theory',
+    items: [
+      {
+        id: 'closure',
+        n: 31,
+        title: 'Which equations follow from E? The four closure rules',
+        source: 'Def. 3.16 · Exercise 5',
+        priority: 'refresh',
+      },
+      {
+        id: 'soundness',
+        n: 32,
+        title: '⊢ equals ⊨',
+        source: 'Thm 3.19',
+        priority: 'skim',
+      },
+    ],
+  },
+  {
+    letter: 'D',
+    title: 'Normal forms and completion',
+    items: [
+      {
+        id: 'term-order',
+        n: 33,
+        title: 'Is this a term order? Why "more general than" fails',
+        source: 'eq3 · exam26bA Q2.2',
+        priority: 'refresh',
+        stars: 1,
+      },
+      {
+        id: 'reduce',
+        n: 34,
+        title: 'Reduce a term to normal form',
+        source: 'Alg. 3.21',
+        priority: 'refresh',
+      },
+      {
+        id: 'non-confluent',
+        n: 35,
+        title: 'Which terms can be an output of reduction',
+        source: 'Exercise 6',
+        priority: 'refresh',
+      },
+      {
+        id: 'critical-pairs',
+        n: 36,
+        title: 'Compute all critical pairs',
+        source: 'exam25a Q2.3 · exam26bA Q2.4 · Exercise 6',
+        priority: 'refresh',
+        stars: 2,
+      },
+      {
+        id: 'renaming',
+        n: 37,
+        title: 'Critical pairs up to variable renaming',
+        source: 'Exercise 6',
+        priority: 'refresh',
+      },
+      {
+        id: 'knuth-bendix',
+        n: 38,
+        title: 'Knuth-Bendix completion; it need not terminate',
+        source: 'Alg. 3.26 · exam26bA Q2.1',
+        priority: 'refresh',
+      },
+    ],
+  },
+]
+
+const FIRST_ORDER_SECTIONS: Section[] = [
+  {
+    letter: 'A',
+    title: 'Syntax and semantics',
+    items: [
+      {
+        id: 'signature',
+        n: 39,
+        title: 'Signature, arity, well-formed formulas',
+        source: 'ln §4.1',
+        priority: 'skim',
+      },
+      {
+        id: 'fo-vocabulary',
+        n: 40,
+        title: 'Atom, ground atom, literal, bound, free, clean, closed',
+        source: 'Exercise 7 · fo1',
+        priority: 'skim',
+      },
+      {
+        id: 'fo-evaluate',
+        n: 41,
+        title: 'Evaluate a formula under a finite interpretation',
+        source: 'ln §4.1 · exam26a Q4.2',
+        priority: 'refresh',
+      },
+    ],
+  },
+  {
+    letter: 'B',
+    title: 'Normal forms',
+    items: [
+      {
+        id: 'prenex',
+        n: 42,
+        title: 'Prenex normal form — the seven shifting equivalences',
+        source: 'Fig. 4.1',
+        priority: 'refresh',
+      },
+      {
+        id: 'skolem',
+        n: 43,
+        title: 'Skolemization and Skolem normal form',
+        source: 'all three exams · Exercise 8',
+        priority: 'lost',
+        stars: 3,
+      },
+      {
+        id: 'clausify',
+        n: 44,
+        title: 'Clausification',
+        source: 'ln §4.2',
+        priority: 'refresh',
+      },
+    ],
+  },
+  {
+    letter: 'C',
+    title: 'Ground methods',
+    items: [
+      {
+        id: 'herbrand-universe',
+        n: 45,
+        title: 'Herbrand universe — invent a constant if there is none',
+        source: 'Exercise 8 · fo2',
+        priority: 'lost',
+        stars: 1,
+      },
+      {
+        id: 'herbrand-expansion',
+        n: 46,
+        title: 'Herbrand expansion — the ground instances',
+        source: 'Exercise 8',
+        priority: 'lost',
+      },
+      {
+        id: 'herbrand-models',
+        n: 47,
+        title: 'Herbrand interpretations and models',
+        source: 'Example 4.19',
+        priority: 'refresh',
+      },
+      {
+        id: 'herbrand-theorem',
+        n: 48,
+        title: 'Herbrand\'s theorem',
+        source: 'Thm 4.21',
+        priority: 'skim',
+      },
+      {
+        id: 'gilmore',
+        n: 49,
+        title: 'Gilmore / instantiation refutation',
+        source: 'exam25a Q3.2 · recap Ex 1',
+        priority: 'lost',
+        stars: 1,
+      },
+    ],
+  },
+  {
+    letter: 'D',
+    title: 'Resolution',
+    items: [
+      {
+        id: 'fo-resolution',
+        n: 50,
+        title: 'First-order resolution with unification',
+        source: 'exam26a Q3.2 · exam25a Q3.3 · recap Ex 2 · Exercise 8',
+        priority: 'lost',
+        stars: 2,
+      },
+      {
+        id: 'factoring',
+        n: 51,
+        title: 'Factoring',
+        source: 'Def. 4.28',
+        priority: 'refresh',
+      },
+      {
+        id: 'lifting',
+        n: 52,
+        title: 'Soundness, completeness, the Lifting Lemma',
+        source: 'Thm 4.30',
+        priority: 'skim',
+      },
+    ],
+  },
+  {
+    letter: 'E',
+    title: 'Equality',
+    items: [
+      {
+        id: 'equality-axioms',
+        n: 53,
+        title: 'Equality axioms E_φ with standard resolution',
+        source: 'ln §4.4 · Exercise 9',
+        priority: 'lost',
+      },
+      {
+        id: 'reflexivity-resolution',
+        n: 54,
+        title: 'Reflexivity resolution',
+        source: 'Def. 4.40',
+        priority: 'lost',
+      },
+      {
+        id: 'paramodulation',
+        n: 55,
+        title: 'Paramodulation',
+        source: 'exam26bA Q3.2 · Exercise 9 · recap Ex 3',
+        priority: 'lost',
+        stars: 1,
+      },
+    ],
+  },
+]
+
+const THEORIES_SECTIONS: Section[] = [
+  {
+    letter: 'A',
+    title: 'Basics',
+    items: [
+      {
+        id: 'theory-tf',
+        n: 56,
+        title: 'True/false on theories — closed under implication',
+        source: 'all three exams · Def. 5.1',
+        priority: 'refresh',
+        stars: 3,
+      },
+      {
+        id: 'theory-properties',
+        n: 57,
+        title: 'Complete, decidable, finitely axiomatizable, inconsistent',
+        source: 'theories2',
+        priority: 'refresh',
+      },
+      {
+        id: 'theory-sets',
+        n: 58,
+        title: 'Subsets, supersets, unions; one false formula and everything follows',
+        source: 'Exercise 10 · all three exams',
+        priority: 'refresh',
+      },
+      {
+        id: 'theory-membership',
+        n: 59,
+        title: 'Does formula φ belong to theory T? Justify',
+        source: 'exam26a Q4.2',
+        priority: 'refresh',
+        stars: 1,
+      },
+      {
+        id: 'provability',
+        n: 60,
+        title: 'Provability claims — "every provable formula is true"',
+        source: 'Exercise 11',
+        priority: 'lost',
+      },
+    ],
+  },
+  {
+    letter: 'B',
+    title: 'Quantifier elimination',
+    items: [
+      {
+        id: 'qe-basics',
+        n: 61,
+        title: 'What QE is; it does not imply decidability',
+        source: 'Def. 5.4',
+        priority: 'refresh',
+      },
+      {
+        id: 'qe-finite',
+        n: 62,
+        title: 'QE over finite universes — ∀ to ∧, ∃ to ∨',
+        source: 'Example 5.5',
+        priority: 'refresh',
+      },
+      {
+        id: 'qe-dense',
+        n: 63,
+        title: 'QE for unbounded dense linear orders',
+        source: 'exam25a Q4.2 · exam26bA Q4.2 · Exercise 10',
+        priority: 'refresh',
+        stars: 3,
+      },
+    ],
+  },
+  {
+    letter: 'C',
+    title: 'Natural numbers',
+    items: [
+      {
+        id: 'nat-plus',
+        n: 64,
+        title: 'T(ℕ,=,+) — decidable by automata, no QE, not finitely axiomatizable',
+        source: 'theories2',
+        priority: 'lost',
+      },
+      {
+        id: 'automata',
+        n: 65,
+        title: 'Finite automata — which strings are accepted?',
+        source: 'Exercise 11',
+        priority: 'lost',
+        stars: 1,
+      },
+      {
+        id: 'nat-times',
+        n: 66,
+        title: 'T(ℕ,=,+,*) — undecidable; Gödel incompleteness',
+        source: 'theories2',
+        priority: 'lost',
+      },
+      {
+        id: 'divides',
+        n: 67,
+        title: 'Write formulas with x|y and prime(p)',
+        source: 'exam26a Q4.3 · exam26bA Q4.3 · Exercise 11',
+        priority: 'lost',
+        stars: 2,
+      },
+      {
+        id: 'nat-vs-real',
+        n: 68,
+        title: 'ℕ vs ℝ — a formula true in one and not the other',
+        source: 'exam25a Q4.3 · both 2026 exams',
+        priority: 'lost',
+        stars: 1,
+      },
+    ],
+  },
+  {
+    letter: 'D',
+    title: 'Real numbers and circuits',
+    items: [
+      {
+        id: 'tarski',
+        n: 69,
+        title: 'T(ℝ,=,+,*) is decidable by QE (Tarski); doubly exponential',
+        source: 'theories3',
+        priority: 'lost',
+      },
+      {
+        id: 'real-checkbox',
+        n: 70,
+        title: 'Which formulas are true in T(ℝ,=,+,*)?',
+        source: 'Exercise 12',
+        priority: 'lost',
+      },
+      {
+        id: 'solution-set',
+        n: 71,
+        title: 'Pick the shaded solution-set picture for a formula',
+        source: 'Exercise 12 · theories3',
+        priority: 'lost',
+        stars: 1,
+      },
+      {
+        id: 'gate-polynomials',
+        n: 72,
+        title: 'Gate polynomials — AND, OR, XOR',
+        source: 'Exercise 12 · Fig. 5.3',
+        priority: 'lost',
+        stars: 1,
+      },
+      {
+        id: 'circuit-verify',
+        n: 73,
+        title: 'Verify a circuit by polynomial reduction',
+        source: 'exam26a Q4.4 · exam26bA Q4.4 · recap Ex 6',
+        priority: 'lost',
+        stars: 2,
+      },
+    ],
+  },
+  {
+    letter: 'E',
+    title: 'Bonus',
+    items: [
+      {
+        id: 'portrait',
+        n: 74,
+        title: 'Portrait ID — the only pictured figure in the course',
+        source: 'exam26a bonus · theories2',
+        priority: 'skim',
+      },
+      {
+        id: 'short-proof',
+        n: 75,
+        title: 'Short proof — e.g. a pure literal gives a blocked clause',
+        source: 'exam26bA bonus',
+        priority: 'refresh',
       },
     ],
   },
@@ -282,6 +866,7 @@ export const CATEGORIES: readonly CategoryInfo[] = [
     icon: '=',
     colour: 'bg-grass text-white',
     planned: ['Terms', 'Substitution and unification', 'Normal forms', 'Completion'],
+    sections: EQUATIONAL_SECTIONS,
   },
   {
     id: 'first-order',
@@ -295,6 +880,7 @@ export const CATEGORIES: readonly CategoryInfo[] = [
       'Resolution',
       'First-order logic with equality',
     ],
+    sections: FIRST_ORDER_SECTIONS,
   },
   {
     id: 'fol-theories',
@@ -303,6 +889,7 @@ export const CATEGORIES: readonly CategoryInfo[] = [
     icon: '⊨',
     colour: 'bg-plum text-white',
     planned: ['Quantifier elimination', 'Natural numbers', 'Real numbers'],
+    sections: THEORIES_SECTIONS,
   },
 ]
 
