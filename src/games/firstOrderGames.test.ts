@@ -22,6 +22,16 @@ import { isPrenex, pnfOptions, showFormula as show, splitPrenex, toPrenex } from
 import { prenexGame, formulaOf as prenexFormulaOf, replayPrenex } from './prenex'
 import { existentials, skolemGame, formulaOf as skolemFormulaOf } from './skolem'
 import { clausifyGame, drive, isCnf, matrixOf } from './clausify'
+import {
+  buildableSignature,
+  clausesOf as universeClausesOf,
+  herbrandUniverseGame,
+} from './herbrandUniverse'
+import { expansionOf, herbrandExpansionGame } from './herbrandExpansion'
+import { baseOf, herbrandModelGame, someModelExists } from './herbrandModel'
+import { groundOf, herbrandTheoremGame, isUnsatisfiable, smallestSubset } from './herbrandTheorem'
+import { availableInstances, gilmoreGame, isContradictory, smallestRefutation } from './gilmore'
+import { findFoRefutation, herbrandLanguage, herbrandUniverse, parseFoClauseSet, showTerm } from '@/logic'
 
 const SEEDS = ['a1', 'b2', 'c3', 'd4', 'e5', 'f6']
 
@@ -403,6 +413,290 @@ describe('Down To Clauses', () => {
         expect(show(matrixOf(question))).toBeTruthy()
         expect(splitPrenex(matrixOf(question)).prefix).toHaveLength(0)
       }
+    }
+  })
+})
+
+describe('Build The Universe', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the reference tray correct on ${difficulty}`, () => {
+      for (const question of sample(herbrandUniverseGame, difficulty)) {
+        const verdict = herbrandUniverseGame.check(question, herbrandUniverseGame.solve(question))
+        expect([question.clauses.join(';'), verdict.correct]).toEqual([
+          question.clauses.join(';'),
+          true,
+        ])
+      }
+    })
+
+    it(`stores exactly what herbrandUniverse produces on ${difficulty}`, () => {
+      for (const question of sample(herbrandUniverseGame, difficulty)) {
+        const clauses = universeClausesOf(question)
+        expect(new Set(question.elements)).toEqual(
+          new Set(herbrandUniverse(clauses, question.depth).map(showTerm)),
+        )
+      }
+    })
+
+    it(`offers exactly the clause set's own symbols on ${difficulty}`, () => {
+      for (const question of sample(herbrandUniverseGame, difficulty)) {
+        const language = herbrandLanguage(universeClausesOf(question))
+        const palette = buildableSignature(question)
+        for (const constant of language.constants) {
+          expect(palette[(constant as { name: string }).name]).toBe(0)
+        }
+        for (const [name, arity] of language.functions) expect(palette[name]).toBe(arity)
+        // Nothing else — a symbol the clauses never use cannot be built.
+        expect(Object.keys(palette).length).toBe(
+          language.constants.length + language.functions.length,
+        )
+      }
+    })
+  }
+
+  it('says when a constant had to be invented', () => {
+    const question = {
+      predicates: { p: 1 },
+      functions: { f: 1 },
+      clauses: ['¬p(x)', 'p(f(x))'],
+      depth: 1,
+      elements: [],
+      invented: true,
+    }
+    const language = herbrandLanguage(universeClausesOf(question))
+    expect(language.invented).toBe(true)
+    expect(buildableSignature(question).a).toBe(0)
+  })
+
+  it('never names an element in the retry message', () => {
+    for (const question of sample(herbrandUniverseGame, 'medium')) {
+      const verdict = herbrandUniverseGame.check(question, [])
+      for (const element of question.elements) expect(verdict.message).not.toContain(element)
+    }
+  })
+})
+
+describe('Ground It', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the reference tray correct on ${difficulty}`, () => {
+      for (const question of sample(herbrandExpansionGame, difficulty)) {
+        expect(
+          herbrandExpansionGame.check(question, herbrandExpansionGame.solve(question)).correct,
+        ).toBe(true)
+      }
+    })
+
+    it(`always has a variable to ground on ${difficulty}`, () => {
+      for (const question of sample(herbrandExpansionGame, difficulty)) {
+        expect(question.instances.length).toBeGreaterThanOrEqual(3)
+        expect(new Set(question.instances)).toEqual(new Set(expansionOf(question)))
+      }
+    })
+  }
+
+  it('gives one instance per tuple, not per variable', () => {
+    // Both constants have to *occur*, or they are not in the universe — a
+    // signature that merely declares them is not enough.
+    const question = {
+      predicates: { q: 2 },
+      functions: { a: 0, b: 0 },
+      clauses: ['q(x,y)', 'q(a(),b())'],
+      depth: 0,
+      instances: [] as string[],
+    }
+    // Two constants, two variables — four instances of the open clause.
+    expect(expansionOf(question)).toHaveLength(4)
+  })
+
+  it('moves both occurrences of one variable together', () => {
+    const question = {
+      predicates: { q: 2 },
+      functions: { a: 0, b: 0 },
+      clauses: ['q(x,x)', 'q(a(),b())'],
+      depth: 0,
+      instances: [] as string[],
+    }
+    expect(expansionOf(question)).toEqual(['q(a(),a())', 'q(b(),b())', 'q(a(),b())'])
+  })
+
+  it('invents a constant when none occurs, so the universe is nonempty', () => {
+    const question = {
+      predicates: { q: 2 },
+      functions: { a: 0, b: 0 },
+      clauses: ['q(x,y)'],
+      depth: 0,
+      instances: [] as string[],
+    }
+    expect(expansionOf(question)).toEqual(['q(a(),a())'])
+  })
+})
+
+describe('Switch It On', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the reference answer correct on ${difficulty}`, () => {
+      for (const question of sample(herbrandModelGame, difficulty)) {
+        expect(herbrandModelGame.check(question, herbrandModelGame.solve(question)).correct).toBe(
+          true,
+        )
+      }
+    })
+
+    it(`stores a verdict the exhaustive search agrees with on ${difficulty}`, () => {
+      for (const question of sample(herbrandModelGame, difficulty)) {
+        expect([question.clauses.join(';'), question.hasModel]).toEqual([
+          question.clauses.join(';'),
+          someModelExists(question),
+        ])
+      }
+    })
+
+    it(`keeps the base small enough to search on ${difficulty}`, () => {
+      for (const question of sample(herbrandModelGame, difficulty)) {
+        expect(baseOf(question).length).toBeLessThanOrEqual(8)
+      }
+    })
+  }
+
+  it('asks both answers across a round', () => {
+    const answers = new Set(
+      DIFFICULTIES.flatMap((difficulty) =>
+        sample(herbrandModelGame, difficulty).map((question) => question.hasModel),
+      ),
+    )
+    expect(answers).toEqual(new Set([true, false]))
+  })
+
+  it('refuses a set of atoms that falsifies a clause', () => {
+    const question = {
+      predicates: { p: 1 },
+      functions: { a: 0 },
+      clauses: ['p(a())', '¬p(a())'],
+      hasModel: false,
+    }
+    expect(herbrandModelGame.check(question, [0]).correct).toBe(false)
+    expect(herbrandModelGame.check(question, []).correct).toBe(false)
+    expect(herbrandModelGame.check(question, null).correct).toBe(true)
+  })
+})
+
+describe('The Finite Witness', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the reference subset correct on ${difficulty}`, () => {
+      for (const question of sample(herbrandTheoremGame, difficulty)) {
+        expect(
+          herbrandTheoremGame.check(question, herbrandTheoremGame.solve(question)).correct,
+        ).toBe(true)
+      }
+    })
+
+    it(`never poses a witness that is the whole set on ${difficulty}`, () => {
+      for (const question of sample(herbrandTheoremGame, difficulty)) {
+        if (question.par === 0) continue
+        expect(question.par).toBeLessThan(question.ground.length)
+      }
+    })
+
+    it(`stores a par the search agrees with on ${difficulty}`, () => {
+      for (const question of sample(herbrandTheoremGame, difficulty)) {
+        expect([question.ground.join(';'), question.par]).toEqual([
+          question.ground.join(';'),
+          smallestSubset(question)?.length ?? 0,
+        ])
+      }
+    })
+  }
+
+  it('asks both answers across a round', () => {
+    const answers = new Set(
+      DIFFICULTIES.flatMap((difficulty) =>
+        sample(herbrandTheoremGame, difficulty).map((question) => question.par === 0),
+      ),
+    )
+    expect(answers).toEqual(new Set([true, false]))
+  })
+
+  it('accepts a bigger witness, and says the smaller one exists', () => {
+    const question = herbrandTheoremGame.generate({
+      rng: makeRng('ht1'),
+      difficulty: 'medium',
+      questionIndex: 0,
+    })
+    if (question.par === 0) return
+    const all = question.ground.map((_, index) => index)
+    if (isUnsatisfiable(groundOf(question))) {
+      const verdict = herbrandTheoremGame.check(question, all)
+      expect(verdict.correct).toBe(true)
+    }
+  })
+
+  it('refuses a satisfiable subset', () => {
+    const question = {
+      predicates: { p: 1 },
+      functions: { a: 0, f: 1 },
+      ground: ['p(a())', '¬p(a())', 'p(f(a()))'],
+      par: 2,
+    }
+    expect(herbrandTheoremGame.check(question, [0, 2]).correct).toBe(false)
+    expect(herbrandTheoremGame.check(question, [0, 1]).correct).toBe(true)
+  })
+})
+
+describe('Instantiate Until It Breaks', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the smallest witness correct on ${difficulty}`, () => {
+      for (const question of sample(gilmoreGame, difficulty)) {
+        expect(gilmoreGame.check(question, gilmoreGame.solve(question)).correct).toBe(true)
+      }
+    })
+
+    it(`only poses unsatisfiable clause sets on ${difficulty}`, () => {
+      for (const question of sample(gilmoreGame, difficulty)) {
+        const clauses = parseFoClauseSet(question.clauses, {
+          predicates: question.predicates,
+          functions: question.functions,
+        })
+        expect([question.clauses.join(';'), findFoRefutation(clauses, 300).refuted]).toEqual([
+          question.clauses.join(';'),
+          true,
+        ])
+        expect(question.par).toBeGreaterThan(0)
+      }
+    })
+
+    it(`can always be won at the offered depth on ${difficulty}`, () => {
+      for (const question of sample(gilmoreGame, difficulty)) {
+        const witness = smallestRefutation(question)
+        expect(witness).not.toBeNull()
+        expect(witness?.length).toBe(question.par)
+        for (const entry of witness ?? []) {
+          expect(availableInstances(question)).toContain(entry)
+        }
+      }
+    })
+  }
+
+  it('refuses an instance that is not one', () => {
+    const question = gilmoreGame.generate({
+      rng: makeRng('gm1'),
+      difficulty: 'easy',
+      questionIndex: 0,
+    })
+    const verdict = gilmoreGame.check(question, ['p(nonsense())'])
+    expect(verdict.correct).toBe(false)
+    expect(verdict.message).toContain('not a ground instance')
+  })
+
+  it('refuses a set that is still satisfiable', () => {
+    const question = gilmoreGame.generate({
+      rng: makeRng('gm2'),
+      difficulty: 'easy',
+      questionIndex: 0,
+    })
+    const one = availableInstances(question).slice(0, 1)
+    if (!isContradictory(parseFoClauseSet(one, { predicates: question.predicates, functions: question.functions }))) {
+      const verdict = gilmoreGame.check(question, one)
+      expect(verdict.correct).toBe(false)
+      expect(verdict.message).toContain('satisfiable')
     }
   })
 })

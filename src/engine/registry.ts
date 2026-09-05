@@ -41,6 +41,9 @@ import { foEvaluateGame } from '@/games/foEvaluate'
 import { prenexGame } from '@/games/prenex'
 import { clausifyGame } from '@/games/clausify'
 import { herbrandExpansionGame } from '@/games/herbrandExpansion'
+import { gilmoreGame } from '@/games/gilmore'
+import { herbrandTheoremGame } from '@/games/herbrandTheorem'
+import { herbrandModelGame } from '@/games/herbrandModel'
 import { herbrandUniverseGame } from '@/games/herbrandUniverse'
 import { skolemGame } from '@/games/skolem'
 import { wellFormedGame } from '@/games/wellFormed'
@@ -110,6 +113,9 @@ export const MINIGAMES: readonly AnyMinigame[] = [
   clausifyGame,
   herbrandUniverseGame,
   herbrandExpansionGame,
+  herbrandModelGame,
+  gilmoreGame,
+  herbrandTheoremGame,
 ]
 
 export function getMinigame(id: string): AnyMinigame | undefined {
