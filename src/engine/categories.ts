@@ -347,12 +347,14 @@ const EQUATIONAL_SECTIONS: Section[] = [
         title: 'Parse a term from a string with no commas or parens',
         source: 'Exercise 4 · Collection Q11',
         stars: 1,
+        game: 'term-flat',
       },
       {
         id: 'term-properties',
         n: 23,
         title: 'Ground terms; when T(F, a, V) is infinite',
         source: 'Exercise 4 · ln §3.1',
+        game: 'term-build',
         requires: ['term-parse'],
         why: 'You have to be able to read a term before you can say anything about the set of them.',
       },
@@ -362,6 +364,7 @@ const EQUATIONAL_SECTIONS: Section[] = [
         title: 'Does an equation hold under a concrete interpretation?',
         source: 'Collection Q12 · eq1',
         stars: 1,
+        game: 'interpretation',
         requires: ['term-parse'],
         why: 'An interpretation assigns meaning to the symbols of a term you can already parse.',
       },
@@ -941,6 +944,10 @@ export const TOPIC_CATEGORY: Readonly<Record<Topic, Category>> = {
   // Propositional equivalence lives in chapter 2, not chapter 3: "Equational
   // Reasoning" in this course means term rewriting, not equivalence laws.
   equivalence: 'propositional',
+  terms: 'equational',
+  unification: 'equational',
+  'equational-theory': 'equational',
+  rewriting: 'equational',
 }
 
 export function topicsInCategory(category: Category): Topic[] {

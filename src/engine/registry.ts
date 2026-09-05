@@ -27,6 +27,9 @@ import { refutationGame } from '@/games/refutation'
 import { rupBuilderGame } from '@/games/rupBuilder'
 import { rupGame } from '@/games/rupProof'
 import { resolventsGame } from '@/games/resolvents'
+import { interpretationGame } from '@/games/interpretationGame'
+import { termBuildGame } from '@/games/termBuild'
+import { termFlatGame } from '@/games/termFlat'
 import { tseitinGame } from '@/games/tseitin'
 import { truthTableGame } from '@/games/truthTable'
 
@@ -60,6 +63,9 @@ export const MINIGAMES: readonly AnyMinigame[] = [
   entailmentRefutationGame,
   rupBuilderGame,
   blockedLiteralGame,
+  termFlatGame,
+  termBuildGame,
+  interpretationGame,
 ]
 
 export function getMinigame(id: string): AnyMinigame | undefined {

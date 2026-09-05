@@ -28,6 +28,10 @@ export type Topic =
   | 'entailment'
   | 'resolution'
   | 'proof-systems'
+  | 'terms'
+  | 'unification'
+  | 'equational-theory'
+  | 'rewriting'
 
 export const TOPIC_LABELS: Readonly<Record<Topic, string>> = {
   syntax: 'Syntax & parsing',
@@ -38,6 +42,10 @@ export const TOPIC_LABELS: Readonly<Record<Topic, string>> = {
   entailment: 'Entailment',
   resolution: 'Resolution',
   'proof-systems': 'Proof systems',
+  terms: 'Terms',
+  unification: 'Substitution & unification',
+  'equational-theory': 'Equational theories',
+  rewriting: 'Rewriting & completion',
 }
 
 export interface Verdict {
