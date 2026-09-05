@@ -522,6 +522,13 @@ export function parseFormula(source: string, signature: FoSignature): FoFormula 
 
   const name = (): string => {
     const start = index
+    // `=` is a predicate symbol like any other in this course's syntax, and it
+    // is the one whose name is not a letter — §4.4 adds it to the signature
+    // rather than to the grammar.
+    if (text[index] === '=') {
+      index++
+      return '='
+    }
     if (!/[A-Za-z_]/.test(text[index] ?? '')) fail('Expected a symbol')
     index++
     while (/[A-Za-z0-9_]/.test(text[index] ?? '')) index++

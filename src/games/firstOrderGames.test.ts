@@ -31,7 +31,24 @@ import { expansionOf, herbrandExpansionGame } from './herbrandExpansion'
 import { baseOf, herbrandModelGame, someModelExists } from './herbrandModel'
 import { groundOf, herbrandTheoremGame, isUnsatisfiable, smallestSubset } from './herbrandTheorem'
 import { availableInstances, gilmoreGame, isContradictory, smallestRefutation } from './gilmore'
-import { findFoRefutation, herbrandLanguage, herbrandUniverse, parseFoClauseSet, showTerm } from '@/logic'
+import {
+  findFoRefutation,
+  foBinaryResolvents,
+  foFactors,
+  herbrandLanguage,
+  herbrandUniverse,
+  paramodulants,
+  parseFoClauseSet,
+  reflexivitySteps,
+  showFoClause,
+  showTerm,
+} from '@/logic'
+import { clausesOf as resolutionClausesOf, foResolutionGame, replayDerivation } from './foResolutionGame'
+import { clauseOf as factorClauseOf, factoringGame } from './factoring'
+import { clauseOf as reflexivityClauseOf, reflexivityGame } from './reflexivityResolution'
+import { clausesOf as paramodulationClausesOf, paramodulationGame } from './paramodulation'
+import { axiomsOf, equalityAxiomsGame, refutesWith, smallestSet } from './equalityAxioms'
+import { clausesOf as liftingClausesOf, isInstanceOf, liftingGame, parse as liftingParse } from './lifting'
 
 const SEEDS = ['a1', 'b2', 'c3', 'd4', 'e5', 'f6']
 
@@ -698,5 +715,289 @@ describe('Instantiate Until It Breaks', () => {
       expect(verdict.correct).toBe(false)
       expect(verdict.message).toContain('satisfiable')
     }
+  })
+})
+
+describe('Resolve With Unification', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the reference refutation correct on ${difficulty}`, () => {
+      for (const question of sample(foResolutionGame, difficulty)) {
+        const verdict = foResolutionGame.check(question, foResolutionGame.solve(question))
+        expect([question.clauses.join(';'), verdict.correct]).toEqual([
+          question.clauses.join(';'),
+          true,
+        ])
+      }
+    })
+
+    it(`only poses unsatisfiable sets on ${difficulty}`, () => {
+      for (const question of sample(foResolutionGame, difficulty)) {
+        expect(findFoRefutation(resolutionClausesOf(question), 300).refuted).toBe(true)
+        expect(question.par).toBeGreaterThan(0)
+      }
+    })
+  }
+
+  it('refuses a clause that is not a resolvent of two it has', () => {
+    const question = foResolutionGame.generate({
+      rng: makeRng('fr1'),
+      difficulty: 'easy',
+      questionIndex: 0,
+    })
+    const verdict = foResolutionGame.check(question, ['p(nonsense())'])
+    expect(verdict.correct).toBe(false)
+  })
+
+  it('refuses stopping before ⊥', () => {
+    const question = foResolutionGame.generate({
+      rng: makeRng('fr2'),
+      difficulty: 'medium',
+      questionIndex: 0,
+    })
+    const verdict = foResolutionGame.check(question, [])
+    expect(verdict.correct).toBe(false)
+    expect(verdict.message).toContain('No steps')
+  })
+
+  it('replays a derivation to the same clauses every time', () => {
+    const question = foResolutionGame.generate({
+      rng: makeRng('fr3'),
+      difficulty: 'medium',
+      questionIndex: 0,
+    })
+    const moves = foResolutionGame.solve(question)
+    const signature = { predicates: question.predicates, functions: question.functions }
+    const once = replayDerivation(resolutionClausesOf(question), moves, signature)
+    const twice = replayDerivation(resolutionClausesOf(question), moves, signature)
+    expect(once.known.map(showFoClause)).toEqual(twice.known.map(showFoClause))
+  })
+})
+
+describe('Merge Them', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the reference tray correct on ${difficulty}`, () => {
+      for (const question of sample(factoringGame, difficulty)) {
+        expect(factoringGame.check(question, factoringGame.solve(question)).correct).toBe(true)
+      }
+    })
+
+    it(`always has a factor to find on ${difficulty}`, () => {
+      for (const question of sample(factoringGame, difficulty)) {
+        expect(question.factors.length).toBeGreaterThan(0)
+        expect(new Set(question.factors)).toEqual(
+          new Set(foFactors(factorClauseOf(question)).map((factor) => showFoClause(factor.clause))),
+        )
+      }
+    })
+  }
+
+  it('applies the mgu to the whole clause, not only the merged pair', () => {
+    const question = {
+      predicates: { p: 1, q: 1 },
+      functions: { a: 0 },
+      clause: 'p(x) ∨ p(a()) ∨ q(x)',
+      factors: [] as string[],
+    }
+    const produced = foFactors(factorClauseOf(question)).map((factor) => showFoClause(factor.clause))
+    expect(produced.some((entry) => entry.includes('q(a())'))).toBe(true)
+  })
+
+  it('never names a factor in the retry message', () => {
+    for (const question of sample(factoringGame, 'medium')) {
+      const verdict = factoringGame.check(question, [])
+      for (const factor of question.factors) expect(verdict.message).not.toContain(factor)
+    }
+  })
+})
+
+describe('Cancel The Disequality', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the reference tray correct on ${difficulty}`, () => {
+      for (const question of sample(reflexivityGame, difficulty)) {
+        expect(reflexivityGame.check(question, reflexivityGame.solve(question)).correct).toBe(true)
+      }
+    })
+
+    it(`always has something to cancel on ${difficulty}`, () => {
+      for (const question of sample(reflexivityGame, difficulty)) {
+        expect(question.results.length).toBeGreaterThan(0)
+        expect(new Set(question.results)).toEqual(
+          new Set(reflexivitySteps(reflexivityClauseOf(question)).map((step) => showFoClause(step.clause))),
+        )
+      }
+    })
+  }
+
+  it('refuses a disequality whose sides do not unify', () => {
+    const question = {
+      predicates: { p: 1 },
+      functions: { a: 0, b: 0 },
+      clause: '¬=(a(),b()) ∨ p(a())',
+      results: [] as string[],
+    }
+    expect(reflexivitySteps(reflexivityClauseOf(question))).toHaveLength(0)
+  })
+
+  it('refuses one blocked by the occurs check', () => {
+    const question = {
+      predicates: { p: 1 },
+      functions: { a: 0, f: 1 },
+      clause: '¬=(x,f(x)) ∨ p(x)',
+      results: [] as string[],
+    }
+    expect(reflexivitySteps(reflexivityClauseOf(question))).toHaveLength(0)
+  })
+
+  it('derives ⊥ from ¬=(x,x)', () => {
+    const question = {
+      predicates: { p: 1 },
+      functions: {},
+      clause: '¬=(x,x)',
+      results: [] as string[],
+    }
+    const steps = reflexivitySteps(reflexivityClauseOf(question))
+    expect(steps).toHaveLength(1)
+    expect(steps[0]?.clause).toEqual([])
+  })
+})
+
+describe('Rewrite Inside', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the reference tray correct on ${difficulty}`, () => {
+      for (const question of sample(paramodulationGame, difficulty)) {
+        expect(paramodulationGame.check(question, paramodulationGame.solve(question)).correct).toBe(
+          true,
+        )
+      }
+    })
+
+    it(`always has at least two results on ${difficulty}`, () => {
+      for (const question of sample(paramodulationGame, difficulty)) {
+        expect(question.results.length).toBeGreaterThanOrEqual(2)
+        const { equation, target } = paramodulationClausesOf(question)
+        expect(new Set(question.results)).toEqual(
+          new Set(paramodulants(equation, target).map((step) => showFoClause(step.clause))),
+        )
+      }
+    })
+  }
+
+  it('replaces one occurrence, giving two results from a doubled term', () => {
+    const question = {
+      predicates: { p: 2 },
+      functions: { a: 0, b: 0 },
+      equation: '=(a(),b())',
+      target: 'p(a(),a())',
+      results: [] as string[],
+    }
+    const { equation, target } = paramodulationClausesOf(question)
+    const produced = paramodulants(equation, target).map((step) => showFoClause(step.clause))
+    expect(produced).toContain('p(b(),a())')
+    expect(produced).toContain('p(a(),b())')
+    expect(produced).not.toContain('p(b(),b())')
+  })
+
+  it('uses the equation in both directions', () => {
+    const question = {
+      predicates: { p: 2 },
+      functions: { a: 0, b: 0 },
+      equation: '=(a(),b())',
+      target: 'p(a(),b())',
+      results: [] as string[],
+    }
+    const { equation, target } = paramodulationClausesOf(question)
+    const steps = paramodulants(equation, target)
+    expect(steps.some((step) => step.reversed)).toBe(true)
+    expect(steps.some((step) => !step.reversed)).toBe(true)
+  })
+})
+
+describe('Teach It Equality', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the smallest axiom set correct on ${difficulty}`, () => {
+      for (const question of sample(equalityAxiomsGame, difficulty)) {
+        expect(equalityAxiomsGame.check(question, equalityAxiomsGame.solve(question)).correct).toBe(
+          true,
+        )
+      }
+    })
+
+    it(`only poses sets resolution cannot refute alone on ${difficulty}`, () => {
+      for (const question of sample(equalityAxiomsGame, difficulty)) {
+        expect(refutesWith(question, [])).toBe(false)
+        expect(question.par).toBeGreaterThan(0)
+      }
+    })
+
+    it(`can always be won with the whole schema on ${difficulty}`, () => {
+      for (const question of sample(equalityAxiomsGame, difficulty)) {
+        const all = axiomsOf(question).map((_, index) => index)
+        expect(refutesWith(question, all)).toBe(true)
+        expect(smallestSet(question)?.length).toBe(question.par)
+      }
+    })
+  }
+
+  it('refuses an empty answer, and says only that it is not enough', () => {
+    const question = equalityAxiomsGame.generate({
+      rng: makeRng('eq1'),
+      difficulty: 'easy',
+      questionIndex: 0,
+    })
+    const verdict = equalityAxiomsGame.check(question, [])
+    expect(verdict.correct).toBe(false)
+    expect(verdict.message).not.toContain('congruence')
+  })
+})
+
+describe('Lift It', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the reference lift correct on ${difficulty}`, () => {
+      for (const question of sample(liftingGame, difficulty)) {
+        const verdict = liftingGame.check(question, liftingGame.solve(question))
+        expect([question.groundResolvent, verdict.correct]).toEqual([
+          question.groundResolvent,
+          true,
+        ])
+      }
+    })
+
+    it(`always has a general step above the ground one on ${difficulty}`, () => {
+      for (const question of sample(liftingGame, difficulty)) {
+        const clauses = liftingClausesOf(question)
+        const ground = liftingParse(question, question.groundResolvent)
+        const steps = foBinaryResolvents(
+          clauses[question.parents[0]] as never,
+          clauses[question.parents[1]] as never,
+        )
+        expect(steps.some((step) => isInstanceOf(step.clause, ground))).toBe(true)
+      }
+    })
+  }
+
+  it('needs one substitution for the whole clause', () => {
+    const question = {
+      predicates: { p: 1, q: 1 },
+      functions: { a: 0, b: 0 },
+      clauses: ['p(x) ∨ q(x)'],
+      parents: [0, 0] as [number, number],
+      groundParents: ['', ''] as [string, string],
+      groundResolvent: 'p(a()) ∨ q(b())',
+    }
+    const general = liftingParse(question, 'p(x) ∨ q(x)')
+    const ground = liftingParse(question, 'p(a()) ∨ q(b())')
+    // x cannot be both a() and b().
+    expect(isInstanceOf(general, ground)).toBe(false)
+    expect(isInstanceOf(general, liftingParse(question, 'p(a()) ∨ q(a())'))).toBe(true)
+  })
+
+  it('refuses a clause that is more general but not a resolvent', () => {
+    const question = liftingGame.generate({
+      rng: makeRng('lf1'),
+      difficulty: 'easy',
+      questionIndex: 0,
+    })
+    const verdict = liftingGame.check(question, null)
+    expect(verdict.correct).toBe(false)
   })
 })

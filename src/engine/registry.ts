@@ -43,6 +43,10 @@ import { clausifyGame } from '@/games/clausify'
 import { herbrandExpansionGame } from '@/games/herbrandExpansion'
 import { gilmoreGame } from '@/games/gilmore'
 import { factoringGame } from '@/games/factoring'
+import { equalityAxiomsGame } from '@/games/equalityAxioms'
+import { liftingGame } from '@/games/lifting'
+import { paramodulationGame } from '@/games/paramodulation'
+import { reflexivityGame } from '@/games/reflexivityResolution'
 import { foResolutionGame } from '@/games/foResolutionGame'
 import { herbrandTheoremGame } from '@/games/herbrandTheorem'
 import { herbrandModelGame } from '@/games/herbrandModel'
@@ -120,6 +124,10 @@ export const MINIGAMES: readonly AnyMinigame[] = [
   herbrandTheoremGame,
   foResolutionGame,
   factoringGame,
+  reflexivityGame,
+  paramodulationGame,
+  equalityAxiomsGame,
+  liftingGame,
 ]
 
 export function getMinigame(id: string): AnyMinigame | undefined {
