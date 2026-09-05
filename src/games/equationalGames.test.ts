@@ -17,6 +17,11 @@ import { replay } from './unifyDriver'
 import { generalityOf, moreGeneralGame } from './moreGeneral'
 import { fateOf, unifiableSortGame } from './unifiableSort'
 import { naiveStep, occursCheckGame, unfold } from './occursCheck'
+import { theoryChainGame } from './theoryChain'
+import { refutes, theoryDecideGame } from './theoryDecide'
+import { replayChain } from './chainBoard'
+import { checkNamed, decide, derive } from '@/logic'
+import type { InterpretationId } from '@/logic'
 import { areVariants, termsEqual, type Term } from '@/logic'
 import { moreGeneral, showTerm, substitutionDomain, unify } from '@/logic'
 import { slotToTerm, hole } from '@/ui/TermBuilder'
@@ -589,6 +594,150 @@ describe('Push It Along', () => {
       const verdict = occursCheckGame.check(question, { resolves: !question.resolves, applied: 0 })
       expect(verdict.correct).toBe(false)
       expect(verdict.message).toBe('Not what happens')
+    }
+  })
+})
+
+describe('Chain It', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the shortest chain correct on ${difficulty}`, () => {
+      for (const question of sample(theoryChainGame, difficulty)) {
+        const verdict = theoryChainGame.check(question, theoryChainGame.solve(question))
+        expect([question.goal, verdict.correct]).toEqual([question.goal, true])
+      }
+    })
+
+    it(`only ever poses a derivable goal on ${difficulty}`, () => {
+      for (const question of sample(theoryChainGame, difficulty)) {
+        const axioms = question.axioms.map((source) => parseEquation(source, question.signature))
+        const goal = parseEquation(question.goal, question.signature)
+        const found = derive(axioms, goal, { maxSize: question.maxSize, maxTerms: 4000 })
+        expect([question.goal, found.derivable]).toEqual([question.goal, true])
+        expect([question.goal, found.chain.length - 1]).toEqual([question.goal, question.par])
+      }
+    })
+
+    it(`never poses a one-step goal on ${difficulty}`, () => {
+      for (const question of sample(theoryChainGame, difficulty)) {
+        expect(question.par).toBeGreaterThanOrEqual(2)
+      }
+    })
+  }
+
+  it('refuses an empty chain', () => {
+    const question = theoryChainGame.generate({ rng: makeRng('h1'), difficulty: 'medium', questionIndex: 0 })
+    const verdict = theoryChainGame.check(question, [])
+    expect(verdict.correct).toBe(false)
+    expect(verdict.message).toContain('No steps')
+  })
+
+  it('accepts a longer chain that still lands, and says so', () => {
+    const question = theoryChainGame.generate({ rng: makeRng('h2'), difficulty: 'easy', questionIndex: 0 })
+    const shortest = theoryChainGame.solve(question)
+    const verdict = theoryChainGame.check(question, shortest)
+    expect(verdict.correct).toBe(true)
+    expect(verdict.message).toContain('Derived in')
+  })
+
+  it('refuses a chain whose moves no longer exist', () => {
+    const question = theoryChainGame.generate({ rng: makeRng('h3'), difficulty: 'medium', questionIndex: 0 })
+    const verdict = theoryChainGame.check(question, [9999])
+    expect(verdict.correct).toBe(false)
+    expect(verdict.message).toContain('replay')
+  })
+
+  it('replays a chain to the same terms every time', () => {
+    const question = theoryChainGame.generate({ rng: makeRng('h4'), difficulty: 'medium', questionIndex: 0 })
+    const axioms = question.axioms.map((source) => parseEquation(source, question.signature))
+    const goal = parseEquation(question.goal, question.signature)
+    const moves = theoryChainGame.solve(question)
+    const once = replayChain(axioms, goal.left, moves, question.maxSize)
+    const twice = replayChain(axioms, goal.left, moves, question.maxSize)
+    expect(once.chain.map(showTerm)).toEqual(twice.chain.map(showTerm))
+  })
+
+  it('never names the chain in the retry message', () => {
+    for (const difficulty of DIFFICULTIES) {
+      for (const question of sample(theoryChainGame, difficulty)) {
+        const verdict = theoryChainGame.check(question, [])
+        expect(verdict.message).not.toContain('=')
+      }
+    }
+  })
+})
+
+describe('Prove Or Refute', () => {
+  for (const difficulty of DIFFICULTIES) {
+    it(`marks the reference answer correct on ${difficulty}`, () => {
+      for (const question of sample(theoryDecideGame, difficulty)) {
+        const verdict = theoryDecideGame.check(question, theoryDecideGame.solve(question))
+        expect([question.goal, verdict.correct]).toEqual([question.goal, true])
+      }
+    })
+
+    it(`never poses an undecidable question on ${difficulty}`, () => {
+      for (const question of sample(theoryDecideGame, difficulty)) {
+        const axioms = question.axioms.map((source) => parseEquation(source, { f: 2, g: 2 }))
+        const goal = parseEquation(question.goal, { f: 2, g: 2 })
+        const verdict = decide(axioms, goal, { maxSize: question.maxSize, maxTerms: 6000 })
+        expect([question.goal, verdict.status]).not.toEqual([question.goal, 'unknown'])
+      }
+    })
+
+    it(`always has a refuting reading when the goal does not follow on ${difficulty}`, () => {
+      for (const question of sample(theoryDecideGame, difficulty)) {
+        if (question.derivable) continue
+        const ids = Object.keys(INTERPRETATIONS) as InterpretationId[]
+        expect([question.goal, ids.some((id) => refutes(question, id))]).toEqual([
+          question.goal,
+          true,
+        ])
+      }
+    })
+  }
+
+  it('asks both jobs across a round', () => {
+    const jobs = new Set(
+      DIFFICULTIES.flatMap((difficulty) =>
+        sample(theoryDecideGame, difficulty).map((question) => question.derivable),
+      ),
+    )
+    expect(jobs).toEqual(new Set([true, false]))
+  })
+
+  it('accepts a refutation on its own merits, not against a stored flag', () => {
+    const question = { axioms: ['f(x,f(y,z))=f(f(x,y),z)'], goal: 'f(x,y)=f(y,x)', maxSize: 16, derivable: true }
+    // The flag says derivable and is wrong; a genuine refutation still passes.
+    const ids = Object.keys(INTERPRETATIONS) as InterpretationId[]
+    const id = ids.find((candidate) => refutes(question, candidate))
+    expect(id).toBeDefined()
+    expect(theoryDecideGame.check(question, { kind: 'refute', id: id as InterpretationId }).correct).toBe(true)
+  })
+
+  it('rejects a reading that breaks an axiom, and says which fault it is', () => {
+    const question = { axioms: ['f(x,y)=f(y,x)'], goal: 'f(x,g(y,z))=g(f(x,y),f(x,z))', maxSize: 16, derivable: false }
+    // Concatenation is not commutative, so it is not a model of E at all.
+    const verdict = theoryDecideGame.check(question, { kind: 'refute', id: 'concatShorter' })
+    expect(checkNamed('concatShorter', parseEquation('f(x,y)=f(y,x)', { f: 2, g: 2 })).holds).toBe(false)
+    expect(verdict.correct).toBe(false)
+    expect(verdict.message).toContain('breaks an axiom')
+  })
+
+  it('rejects a reading that satisfies the goal too', () => {
+    const question = { axioms: ['f(x,f(y,z))=f(f(x,y),z)'], goal: 'f(x,y)=f(y,x)', maxSize: 16, derivable: false }
+    // Multiplication is associative and commutative, so it proves nothing here.
+    const verdict = theoryDecideGame.check(question, { kind: 'refute', id: 'timesPlus' })
+    expect(verdict.correct).toBe(false)
+    expect(verdict.message).toContain('true too')
+  })
+
+  it('never reveals which job was the right one in the retry message', () => {
+    for (const difficulty of DIFFICULTIES) {
+      for (const question of sample(theoryDecideGame, difficulty)) {
+        const verdict = theoryDecideGame.check(question, { kind: 'chain', moves: [] })
+        expect(verdict.correct).toBe(false)
+        expect(verdict.message).not.toMatch(/refut|derivab|follow/i)
+      }
     }
   })
 })

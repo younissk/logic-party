@@ -32,6 +32,8 @@ import { matchingGame } from '@/games/matching'
 import { moreGeneralGame } from '@/games/moreGeneral'
 import { mguGame } from '@/games/mgu'
 import { occursCheckGame } from '@/games/occursCheck'
+import { theoryChainGame } from '@/games/theoryChain'
+import { theoryDecideGame } from '@/games/theoryDecide'
 import { unifiableSortGame } from '@/games/unifiableSort'
 import { interpretationGame } from '@/games/interpretationGame'
 import { termBuildGame } from '@/games/termBuild'
@@ -78,6 +80,8 @@ export const MINIGAMES: readonly AnyMinigame[] = [
   mguGame,
   unifiableSortGame,
   occursCheckGame,
+  theoryChainGame,
+  theoryDecideGame,
 ]
 
 export function getMinigame(id: string): AnyMinigame | undefined {
