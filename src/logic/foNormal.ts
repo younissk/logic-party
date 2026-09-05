@@ -17,6 +17,7 @@
 import { showTerm, termVariables, termsEqual, variable, type Term } from './terms'
 import { applySubstitution } from './substitution'
 import {
+  FoParseError,
   atom,
   binary,
   clean,
@@ -25,10 +26,12 @@ import {
   functionSymbols,
   isClean,
   foNot,
+  parseFormula,
   showFormula,
   substituteFormula,
   type FoConnective,
   type FoFormula,
+  type FoSignature,
   type Quantifier,
 } from './fol'
 
@@ -557,3 +560,37 @@ export const sameFormula = (left: FoFormula, right: FoFormula): boolean =>
 
 export const formulaIsClosed = (formula: FoFormula): boolean =>
   freeVariables(formula).length === 0
+
+// ---------------------------------------------------------------------------
+// Reading clauses back
+// ---------------------------------------------------------------------------
+
+/**
+ * Read a clause written the way the exercises write one: `¬p(a()) ∨ q(x)`.
+ *
+ * Games store their clause sets as source rather than as objects, so a question
+ * stays plain data — and this is the reader that puts them back.
+ */
+export function parseFoClause(source: string, signature: FoSignature): FoClause {
+  const literals = source
+    .split('∨')
+    .map((piece) => piece.trim())
+    .filter((piece) => piece.length > 0)
+
+  if (literals.length === 0 || source.trim() === '□') return []
+
+  return normaliseFoClause(
+    literals.map((text) => {
+      const negated = text.startsWith('¬')
+      const body = negated ? text.slice(1).trim() : text
+      const parsed = parseFormula(body, signature)
+      if (parsed.kind !== 'atom') {
+        throw new FoParseError(`Not a literal: "${text}"`)
+      }
+      return { negated, predicate: parsed.predicate, args: parsed.args }
+    }),
+  )
+}
+
+export const parseFoClauseSet = (sources: readonly string[], signature: FoSignature): FoClause[] =>
+  sources.map((source) => parseFoClause(source, signature))

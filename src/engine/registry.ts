@@ -40,6 +40,8 @@ import { boundFreeGame } from '@/games/boundFree'
 import { foEvaluateGame } from '@/games/foEvaluate'
 import { prenexGame } from '@/games/prenex'
 import { clausifyGame } from '@/games/clausify'
+import { herbrandExpansionGame } from '@/games/herbrandExpansion'
+import { herbrandUniverseGame } from '@/games/herbrandUniverse'
 import { skolemGame } from '@/games/skolem'
 import { wellFormedGame } from '@/games/wellFormed'
 import { pairRenamingGame } from '@/games/pairRenaming'
@@ -106,6 +108,8 @@ export const MINIGAMES: readonly AnyMinigame[] = [
   prenexGame,
   skolemGame,
   clausifyGame,
+  herbrandUniverseGame,
+  herbrandExpansionGame,
 ]
 
 export function getMinigame(id: string): AnyMinigame | undefined {
