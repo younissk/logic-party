@@ -21,3 +21,9 @@ export * from './substitution'
 export * from './rewriting'
 export * from './interpretation'
 export * from './equational'
+
+// Chapter 4 — first-order logic.
+export * from './fol'
+export * from './foNormal'
+export * from './foSemantics'
+export * from './foResolution'
