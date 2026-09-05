@@ -282,6 +282,17 @@ export function resetPlayer(): void {
   commit(emptyPlayer())
 }
 
+/** Overwrite everything — for restoring a backup. */
+export function replacePlayer(next: PlayerState): void {
+  commit({
+    version: 1,
+    xp: Math.max(0, Math.round(next.xp)),
+    style: isAvatarStyle(next.style) ? next.style : state.style,
+    seed: next.seed === '' ? state.seed : next.seed,
+    name: next.name.slice(0, 24),
+  })
+}
+
 export function usePlayer(): PlayerState {
   return useSyncExternalStore(subscribe, getPlayer, getPlayer)
 }

@@ -6,6 +6,7 @@
  * free to be pure fun without quietly becoming a wall.
  */
 
+import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   AVATAR_STYLES,
@@ -21,6 +22,7 @@ import {
 import { Avatar, LevelBar } from '@/ui/Avatar'
 import { currentStreak, daysPractised, overallStats, useProgress } from '@/store/progress'
 import { Button, Card } from '@/ui/primitives'
+import { backupFilename, downloadBackup, restoreBackup, type RestoreResult } from '@/store/backup'
 
 const STYLE_LABELS: Record<AvatarStyle, string> = {
   adventurer: 'Adventurer',
@@ -128,6 +130,8 @@ export function Profile() {
         </p>
       </Card>
 
+      <BackupCard />
+
       <Card>
         <h2 className="text-sm font-bold uppercase tracking-widest text-ink-soft">How XP works</h2>
         <ul className="mt-2 flex list-disc flex-col gap-1.5 pl-5 text-sm font-medium text-ink-soft">
@@ -160,6 +164,85 @@ function Stat({ label, value }: { label: string; value: string }) {
       <p className="mt-0.5 text-[0.65rem] font-bold uppercase tracking-wider text-ink-soft">
         {label}
       </p>
+    </Card>
+  )
+}
+
+/**
+ * Export and import.
+ *
+ * Everything is in this browser's localStorage, so a cleared cache or a second
+ * device starts from nothing. One JSON file carries both halves — the answered
+ * questions and the character — and restoring asks first, because it replaces
+ * rather than merges.
+ */
+function BackupCard() {
+  const player = usePlayer()
+  const progress = useProgress()
+  const stats = overallStats(progress)
+  const fileInput = useRef<HTMLInputElement | null>(null)
+  const [note, setNote] = useState<RestoreResult | null>(null)
+
+  const exportNow = () => {
+    const filename = downloadBackup()
+    setNote({ ok: true, message: `Saved ${filename}` })
+  }
+
+  const importFrom = async (file: File) => {
+    const text = await file.text()
+    if (
+      !window.confirm(
+        'Restoring replaces everything on this device — answers, best scores, XP and character. Continue?',
+      )
+    ) {
+      return
+    }
+    setNote(restoreBackup(text))
+  }
+
+  return (
+    <Card>
+      <h2 className="text-sm font-bold uppercase tracking-widest text-ink-soft">
+        Back up your progress
+      </h2>
+      <p className="mt-2 text-sm font-medium text-ink-soft">
+        All of this lives in this browser only. One file carries {stats.attempts} answered
+        question{stats.attempts === 1 ? '' : 's'}, every best score, and {player.xp} XP to another
+        device.
+      </p>
+
+      <div className="mt-3 flex flex-col gap-2">
+        <Button variant="coin" onClick={exportNow}>
+          ⬇ Export — {backupFilename()}
+        </Button>
+        <Button variant="secondary" onClick={() => fileInput.current?.click()}>
+          ⬆ Import a backup
+        </Button>
+      </div>
+
+      <input
+        ref={fileInput}
+        type="file"
+        accept="application/json,.json"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0]
+          // Cleared so choosing the same file twice fires the change event again.
+          event.target.value = ''
+          if (file !== undefined) void importFrom(file)
+        }}
+      />
+
+      {note !== null && (
+        <p
+          className={`mt-3 rounded-xl px-3 py-2 text-sm font-bold ${
+            note.ok ? 'bg-grass text-white' : 'bg-space-red text-white'
+          }`}
+          aria-live="polite"
+        >
+          {note.message}
+        </p>
+      )}
     </Card>
   )
 }

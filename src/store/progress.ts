@@ -158,6 +158,16 @@ export function clearProgress(): void {
   commit(EMPTY)
 }
 
+/** Overwrite everything — for restoring a backup. */
+export function replaceProgress(next: ProgressState): void {
+  commit({
+    version: 1,
+    attempts: next.attempts.slice(-MAX_ATTEMPTS),
+    highScores: next.highScores ?? {},
+    bestTimes: next.bestTimes ?? {},
+  })
+}
+
 /** Subscribe a component to progress changes. */
 export function useProgress(): ProgressState {
   return useSyncExternalStore(subscribe, getProgress, () => EMPTY)
