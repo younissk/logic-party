@@ -27,3 +27,17 @@ export * from './fol'
 export * from './foNormal'
 export * from './foSemantics'
 export * from './foResolution'
+
+// Chapter 5 — theories in first-order logic.
+export * from './polynomial'
+export * from './automaton'
+
+/**
+ * `arithmetic` is deliberately not re-exported.
+ *
+ * Its builders are a one-letter DSL — `v`, `num`, `and`, `forall` — chosen so
+ * that a formula written in TypeScript still reads like the formula the notes
+ * print. Half those names already belong to the propositional AST, and
+ * prefixing them all would trade the readability the DSL exists for. Import it
+ * as `@/logic/arithmetic` instead.
+ */
