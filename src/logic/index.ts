@@ -14,3 +14,10 @@ export * from './certificates'
 export * from './encoding'
 export * from './solving'
 export * from './tseitin'
+
+// Chapter 3 — equational reasoning.
+export * from './terms'
+export * from './substitution'
+export * from './rewriting'
+export * from './interpretation'
+export * from './equational'
