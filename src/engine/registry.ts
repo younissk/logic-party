@@ -70,6 +70,11 @@ import { runTheMachineGame } from '@/games/runTheMachine'
 import { sayItInTheLanguageGame } from '@/games/sayItInTheLanguage'
 import { pickThePictureGame } from '@/games/pickThePicture'
 import { beatTheChallengerGame } from '@/games/beatTheChallenger'
+import { provabilityGame } from '@/games/provability'
+import { natPlusGame } from '@/games/natPlus'
+import { natTimesGame } from '@/games/natTimes'
+import { tarskiGame } from '@/games/tarski'
+import { natVsRealGame } from '@/games/natVsReal'
 import { interpretationGame } from '@/games/interpretationGame'
 import { termBuildGame } from '@/games/termBuild'
 import { termFlatGame } from '@/games/termFlat'
@@ -152,6 +157,11 @@ export const MINIGAMES: readonly AnyMinigame[] = [
   sayItInTheLanguageGame,
   pickThePictureGame,
   beatTheChallengerGame,
+  provabilityGame,
+  natPlusGame,
+  natTimesGame,
+  tarskiGame,
+  natVsRealGame,
 ]
 
 export function getMinigame(id: string): AnyMinigame | undefined {

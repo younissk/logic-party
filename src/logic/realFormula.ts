@@ -157,7 +157,19 @@ export const CANDIDATES: readonly number[] = [
   -6, -4, -3, -2, -1.5, -1, -0.5, -0.25, 0, 0.25, 0.5, 1, 1.5, 2, 3, 4, 6,
 ]
 
-export function evaluateReal(formula: RealFormula, env: RealEnv): boolean {
+/**
+ * The naturals, as far as a bounded search goes.
+ *
+ * Passing this instead of CANDIDATES is what lets one formula be judged in two
+ * universes — which is exactly what "belongs to T(ℕ,…) but not T(ℝ,…)" asks.
+ */
+export const NATURALS: readonly number[] = [0, 1, 2, 3, 4, 5, 6, 7, 8]
+
+export function evaluateReal(
+  formula: RealFormula,
+  env: RealEnv,
+  candidates: readonly number[] = CANDIDATES,
+): boolean {
   switch (formula.kind) {
     case 'atom': {
       const left = evaluatePolynomial(formula.left, env)
@@ -173,17 +185,23 @@ export function evaluateReal(formula: RealFormula, env: RealEnv): boolean {
       return false
     }
     case 'not':
-      return !evaluateReal(formula.body, env)
+      return !evaluateReal(formula.body, env, candidates)
     case 'and':
-      return evaluateReal(formula.left, env) && evaluateReal(formula.right, env)
+      return (
+        evaluateReal(formula.left, env, candidates) && evaluateReal(formula.right, env, candidates)
+      )
     case 'or':
-      return evaluateReal(formula.left, env) || evaluateReal(formula.right, env)
+      return (
+        evaluateReal(formula.left, env, candidates) || evaluateReal(formula.right, env, candidates)
+      )
     case 'implies':
-      return !evaluateReal(formula.left, env) || evaluateReal(formula.right, env)
+      return (
+        !evaluateReal(formula.left, env, candidates) || evaluateReal(formula.right, env, candidates)
+      )
     case 'quantified': {
       const test = (value: number): boolean =>
-        evaluateReal(formula.body, { ...env, [formula.variable]: value })
-      return formula.quantifier === 'exists' ? CANDIDATES.some(test) : CANDIDATES.every(test)
+        evaluateReal(formula.body, { ...env, [formula.variable]: value }, candidates)
+      return formula.quantifier === 'exists' ? candidates.some(test) : candidates.every(test)
     }
   }
 }

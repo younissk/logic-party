@@ -753,6 +753,7 @@ const THEORIES_SECTIONS: Section[] = [
       {
         id: 'provability',
         n: 60,
+        game: 'provability',
         title: 'Provability claims — "every provable formula is true"',
         source: 'Exercise 11',
         requires: ['theory-properties'],
@@ -800,6 +801,7 @@ const THEORIES_SECTIONS: Section[] = [
       {
         id: 'nat-plus',
         n: 64,
+        game: 'nat-plus',
         title: 'T(ℕ,=,+) — decidable by automata, no QE, not finitely axiomatizable',
         source: 'theories2',
         requires: ['theory-properties'],
@@ -818,6 +820,7 @@ const THEORIES_SECTIONS: Section[] = [
       {
         id: 'nat-times',
         n: 66,
+        game: 'nat-times',
         title: 'T(ℕ,=,+,*) — undecidable; Gödel incompleteness',
         source: 'theories2',
         requires: ['nat-plus'],
@@ -836,6 +839,7 @@ const THEORIES_SECTIONS: Section[] = [
       {
         id: 'nat-vs-real',
         n: 68,
+        game: 'nat-vs-real',
         title: 'ℕ vs ℝ — a formula true in one and not the other',
         source: 'exam25a Q4.3 · both 2026 exams',
         stars: 1,
@@ -851,6 +855,7 @@ const THEORIES_SECTIONS: Section[] = [
       {
         id: 'tarski',
         n: 69,
+        game: 'tarski',
         title: 'T(ℝ,=,+,*) is decidable by QE (Tarski); doubly exponential',
         source: 'theories3',
         requires: ['qe-dense', 'nat-times'],
