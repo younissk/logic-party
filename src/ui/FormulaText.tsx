@@ -44,13 +44,21 @@ export function colourForVariable(name: string): string {
   return VARIABLE_COLOURS[sum % VARIABLE_COLOURS.length] as string
 }
 
-export interface FormulaTextProps {
-  formula: Formula
-  className?: string
-}
+/**
+ * Either an AST, printed with minimal parentheses, or text to colour as-is.
+ *
+ * `text` exists for the places where the brackets *are* the lesson. The
+ * printer correctly drops (a ∧ b) ∨ (c ∧ d) to a ∧ b ∨ c ∧ d, because ∧ binds
+ * tighter — but a page explaining that three conjunctions give 2³ clauses
+ * needs the reader to see the three pairs.
+ */
+export type FormulaTextProps = { className?: string } & (
+  | { formula: Formula; text?: undefined }
+  | { text: string; formula?: undefined }
+)
 
-export function FormulaText({ formula, className = '' }: FormulaTextProps) {
-  const printed = format(formula)
+export function FormulaText({ formula, text, className = '' }: FormulaTextProps) {
+  const printed = text ?? format(formula)
 
   const parts = useMemo((): ReactNode[] => {
     let tokens: ReturnType<typeof tokenize>

@@ -1,8 +1,15 @@
 // @vitest-environment jsdom
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { MINIGAMES } from './registry'
-import { CATEGORIES, CATEGORY_BY_ID, categoriesOf, TOPIC_CATEGORY } from './categories'
+import { getMinigame, MINIGAMES } from './registry'
+import {
+  CATEGORIES,
+  CATEGORY_BY_ID,
+  categoriesOf,
+  sectionProgress,
+  syllabusItems,
+  TOPIC_CATEGORY,
+} from './categories'
 import type { Topic } from './types'
 
 const guides = MINIGAMES.filter((game) => game.Guide !== undefined)
@@ -59,6 +66,65 @@ describe('categories', () => {
     for (const game of MINIGAMES) {
       expect(categoriesOf(game.topics).length, game.id).toBeGreaterThan(0)
     }
+  })
+
+  it('points every syllabus item at a minigame that exists', () => {
+    // A typo in a game id would silently render the item as "soon" forever —
+    // it would look planned rather than broken.
+    for (const category of CATEGORIES) {
+      for (const item of syllabusItems(category.id)) {
+        if (item.game === undefined) continue
+        expect(getMinigame(item.game), `${category.id}: ${item.title}`).toBeDefined()
+      }
+    }
+  })
+
+  it('gives every registered minigame a place in its chapter plan', () => {
+    // The other direction, and the one that actually bites: a new minigame
+    // that nobody added to a section would be unreachable from the category
+    // page even though it is registered.
+    const placed = new Set(
+      CATEGORIES.flatMap((category) => syllabusItems(category.id))
+        .map((item) => item.game)
+        .filter((id): id is string => id !== undefined),
+    )
+    for (const game of MINIGAMES) {
+      const planned = categoriesOf(game.topics).some(
+        (category) => CATEGORY_BY_ID[category].sections !== undefined,
+      )
+      if (!planned) continue
+      expect(placed, `${game.id} is registered but in no section`).toContain(game.id)
+    }
+  })
+
+  it('numbers the study plan without gaps or repeats', () => {
+    for (const category of CATEGORIES) {
+      const numbers = syllabusItems(category.id)
+        .map((item) => item.n)
+        .filter((n): n is number => n !== undefined)
+      if (numbers.length === 0) continue
+      expect(numbers).toEqual([...numbers].sort((a, b) => a - b))
+      expect(new Set(numbers).size).toBe(numbers.length)
+      expect(numbers).toEqual(numbers.map((_, index) => index + 1))
+    }
+  })
+
+  it('says where every syllabus item comes from', () => {
+    // Without a source line the plan is a list of names, and the point is to
+    // be able to go back to the notes or the paper it was asked in.
+    for (const category of CATEGORIES) {
+      for (const item of syllabusItems(category.id)) {
+        expect(item.source.length, item.title).toBeGreaterThan(3)
+      }
+    }
+  })
+
+  it('reports how much of a chapter is built', () => {
+    const propositional = sectionProgress('propositional')
+    expect(propositional.total).toBeGreaterThan(propositional.built)
+    expect(propositional.built).toBe(
+      MINIGAMES.filter((game) => categoriesOf(game.topics).includes('propositional')).length,
+    )
   })
 
   it('describes what an empty category is for', () => {

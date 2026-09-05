@@ -165,20 +165,65 @@ export function disjuncts(formula: Formula): Formula[] {
   return [...disjuncts(formula.left), ...disjuncts(formula.right)]
 }
 
-export function toCNF(formula: Formula): Formula {
-  const distribute = (left: Formula, right: Formula): Formula => {
-    if (left.kind === 'and') return and(distribute(left.left, right), distribute(left.right, right))
-    if (right.kind === 'and') return and(distribute(left, right.left), distribute(left, right.right))
+/**
+ * Distribute ∨ over ∧ until the formula is in CNF.
+ *
+ * Assumes NNF — this is step 4 of the textbook pipeline, and the only step
+ * that can grow the formula. (a∧b) ∨ (c∧d) ∨ (e∧f) becomes 2³ = 8 clauses;
+ * ten such pairs become 1024. That blowup is the entire reason Tseitin exists.
+ *
+ * Exported so the step-by-step pipeline and `toCNF` cannot disagree about
+ * what "distribute" means.
+ */
+export function distribute(formula: Formula): Formula {
+  const push = (left: Formula, right: Formula): Formula => {
+    if (left.kind === 'and') return and(push(left.left, right), push(left.right, right))
+    if (right.kind === 'and') return and(push(left, right.left), push(left, right.right))
     return or(left, right)
   }
 
   const convert = (f: Formula): Formula => {
     if (f.kind === 'and') return guard(and(convert(f.left), convert(f.right)))
-    if (f.kind === 'or') return guard(distribute(convert(f.left), convert(f.right)))
+    if (f.kind === 'or') return guard(push(convert(f.left), convert(f.right)))
     return f
   }
 
-  return simplify(convert(toNNF(simplify(formula))))
+  return convert(formula)
+}
+
+export function toCNF(formula: Formula): Formula {
+  return simplify(distribute(toNNF(simplify(formula))))
+}
+
+/** True when negation appears only directly in front of variables. */
+export function isNNF(formula: Formula): boolean {
+  switch (formula.kind) {
+    case 'var':
+    case 'const':
+      return true
+    case 'not':
+      return formula.arg.kind === 'var' || formula.arg.kind === 'const'
+    case 'and':
+    case 'or':
+      return isNNF(formula.left) && isNNF(formula.right)
+    default:
+      // → and ↔ are not NNF connectives at all.
+      return false
+  }
+}
+
+/** True when the formula contains a connective of this kind anywhere. */
+export function contains(formula: Formula, kind: Formula['kind']): boolean {
+  if (formula.kind === kind) return true
+  switch (formula.kind) {
+    case 'var':
+    case 'const':
+      return false
+    case 'not':
+      return contains(formula.arg, kind)
+    default:
+      return contains(formula.left, kind) || contains(formula.right, kind)
+  }
 }
 
 export function toDNF(formula: Formula): Formula {
@@ -272,4 +317,184 @@ export function showClause(clause: Clause): string {
 
 export function showClauseSet(set: readonly Clause[]): string {
   return `{${set.map(showClause).join(', ')}}`
+}
+
+// ---------------------------------------------------------------------------
+// Unit propagation (BCP)
+// ---------------------------------------------------------------------------
+
+/** One variable forced by a unit clause, and the clause that forced it. */
+export interface ForcedAssignment {
+  readonly name: string
+  readonly value: boolean
+}
+
+export interface Propagation {
+  /** Variables forced, in the order propagation forced them. */
+  readonly forced: readonly ForcedAssignment[]
+  /**
+   * What is left once satisfied clauses are deleted and falsified literals are
+   * struck out of the clauses that remain.
+   */
+  readonly remaining: Clause[]
+  /** True when propagation produced the empty clause. */
+  readonly conflict: boolean
+}
+
+/**
+ * Boolean constraint propagation, run to fixpoint.
+ *
+ * A unit clause has only one literal, so there is no choice about it: that
+ * literal must be true. Setting it satisfies every clause containing it
+ * (delete them) and falsifies its complement everywhere else (strike it out),
+ * which can produce new unit clauses. Repeat until nothing is forced.
+ *
+ * This is the first move in counting models by hand — it costs nothing and it
+ * removes variables from the problem, so what is left is small enough to
+ * enumerate. It is also DPLL's inner loop and an exam question in its own
+ * right ("apply BCP until fixpoint").
+ */
+export function unitPropagate(input: readonly Clause[]): Propagation {
+  const forced: ForcedAssignment[] = []
+  const assigned = new Map<string, boolean>()
+  let remaining: Clause[] = input.map((clause) => [...clause])
+
+  for (;;) {
+    const unit = remaining.find((clause) => clause.length === 1)
+    if (unit === undefined) break
+
+    const literal = unit[0] as Literal
+    const value = !literal.negated
+    assigned.set(literal.name, value)
+    forced.push({ name: literal.name, value })
+
+    const next: Clause[] = []
+    for (const clause of remaining) {
+      // Satisfied by the forced literal — the whole clause goes.
+      if (clause.some((l) => l.name === literal.name && l.negated === literal.negated)) continue
+      // Otherwise strike out the complement wherever it appears.
+      next.push(clause.filter((l) => l.name !== literal.name))
+    }
+    remaining = next
+
+    if (remaining.some((clause) => clause.length === 0)) {
+      return { forced, remaining, conflict: true }
+    }
+  }
+
+  return { forced, remaining, conflict: false }
+}
+
+// ---------------------------------------------------------------------------
+// The textbook CNF pipeline, one step at a time
+// ---------------------------------------------------------------------------
+
+/**
+ * The moves of the CNF transformation, in the order they must be applied.
+ *
+ * The order is not a preference. Distributing before negations are pushed in
+ * leaves ¬(φ∧ψ) sitting inside a clause, which is not a clause; eliminating →
+ * before ↔ misses the implications that ↔ turns into. Doing them out of order
+ * is the single most common way to lose the marks.
+ */
+export type CnfStep = 'iff' | 'implies' | 'nnf' | 'distribute' | 'clean' | 'done'
+
+export const CNF_STEPS: readonly CnfStep[] = ['iff', 'implies', 'nnf', 'distribute', 'clean', 'done']
+
+export const CNF_STEP_LABELS: Readonly<Record<CnfStep, string>> = {
+  iff: 'Eliminate ↔',
+  implies: 'Eliminate →',
+  nnf: 'Push ¬ inwards',
+  distribute: 'Distribute ∨ over ∧',
+  clean: 'Drop tautologies and duplicates',
+  done: 'Done — this is CNF',
+}
+
+export const CNF_STEP_RULES: Readonly<Record<CnfStep, string>> = {
+  iff: 'φ ↔ ψ  ⟹  (φ → ψ) ∧ (ψ → φ)',
+  implies: 'φ → ψ  ⟹  ¬φ ∨ ψ',
+  nnf: '¬(φ ∧ ψ) ⟹ ¬φ ∨ ¬ψ · ¬(φ ∨ ψ) ⟹ ¬φ ∧ ¬ψ · ¬¬φ ⟹ φ',
+  distribute: '(φ ∧ ψ) ∨ χ  ⟹  (φ ∨ χ) ∧ (ψ ∨ χ)',
+  clean: 'a ∨ ¬a ∨ … ⟹ drop the clause · a ∨ b ∨ a ⟹ a ∨ b',
+  done: 'Every conjunct is a disjunction of literals.',
+}
+
+/** True when the clause set still has a tautological clause or a repeated literal. */
+export function needsCleanup(formula: Formula): boolean {
+  if (!isCNF(formula)) return false
+  if (formula.kind === 'const') return false
+  return conjuncts(formula).some((clause) => {
+    const literals = disjuncts(clause).map(toLiteral)
+    if (isTautologicalClause(literals)) return true
+    return literals.some((a, i) => literals.some((b, j) => j > i && literalsEqual(a, b)))
+  })
+}
+
+/**
+ * The one move the pipeline allows next. There is never a choice.
+ *
+ * Read top to bottom: the first test that fires is the answer. That ordering
+ * *is* the algorithm.
+ */
+export function nextCnfStep(formula: Formula): CnfStep {
+  if (contains(formula, 'iff')) return 'iff'
+  if (contains(formula, 'implies')) return 'implies'
+  if (!isNNF(formula)) return 'nnf'
+  if (!isCNF(formula)) return 'distribute'
+  if (needsCleanup(formula)) return 'clean'
+  return 'done'
+}
+
+/** Drop tautological clauses and repeated literals. Assumes CNF. */
+export function cleanClauses(formula: Formula): Formula {
+  if (formula.kind === 'const') return formula
+  const kept: Clause[] = []
+  for (const conjunct of conjuncts(formula)) {
+    const literals = disjuncts(conjunct).map(toLiteral)
+    if (isTautologicalClause(literals)) continue
+    const unique: Literal[] = []
+    for (const literal of literals) {
+      if (!unique.some((seen) => literalsEqual(seen, literal))) unique.push(literal)
+    }
+    kept.push(unique)
+  }
+  // Every clause was a tautology, so the conjunction of none of them is ⊤.
+  return kept.length === 0 ? TRUE : clauseSetToFormula(kept)
+}
+
+/**
+ * Apply one pipeline step, as a full pass over the formula.
+ *
+ * A step that does not apply is a no-op — which is exactly what happens if you
+ * try to distribute before the negations are pushed in, and is worth letting
+ * the player see rather than blocking.
+ */
+export function applyCnfStep(formula: Formula, step: CnfStep): Formula {
+  switch (step) {
+    case 'iff':
+      return eliminateBiconditionals(formula)
+    case 'implies':
+      return eliminateImplications(formula)
+    case 'nnf':
+      return toNNF(formula)
+    case 'distribute':
+      return guard(distribute(formula))
+    case 'clean':
+      return isCNF(formula) ? cleanClauses(formula) : formula
+    case 'done':
+      return formula
+  }
+}
+
+/** Every intermediate formula of a full run, starting with the input. */
+export function cnfPipeline(formula: Formula): { step: CnfStep; result: Formula }[] {
+  const trace: { step: CnfStep; result: Formula }[] = []
+  let current = formula
+  for (let guardCount = 0; guardCount < CNF_STEPS.length + 2; guardCount++) {
+    const step = nextCnfStep(current)
+    if (step === 'done') break
+    current = applyCnfStep(current, step)
+    trace.push({ step, result: current })
+  }
+  return trace
 }

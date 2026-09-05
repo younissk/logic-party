@@ -36,6 +36,28 @@ export function countModels(formula: Formula): number {
   return count
 }
 
+/**
+ * Models counted over a stated set of variables, which may be larger than the
+ * set the formula mentions.
+ *
+ * "How many models does φ have" is not a question about φ alone — it is a
+ * question about φ *and the variables under discussion*. A variable the
+ * formula never mentions is free, so it doubles the count: (a ∨ b) has 3
+ * models over {a, b} and 6 over {a, b, c}. Exam questions state the variable
+ * set for exactly this reason, and dropping it is the classic way to lose the
+ * mark.
+ */
+export function countModelsOver(formula: Formula, variables: readonly string[]): number {
+  const mentioned = sortedVariables(formula)
+  const missing = mentioned.filter((name) => !variables.includes(name))
+  if (missing.length > 0) {
+    throw new RangeError(
+      `Formula mentions ${missing.join(', ')}, which the variable set does not contain`,
+    )
+  }
+  return countModels(formula) * 2 ** (variables.length - mentioned.length)
+}
+
 /** A satisfying assignment, or null if the formula is unsatisfiable. */
 export function findModel(formula: Formula): Assignment | null {
   const variables = sortedVariables(formula)

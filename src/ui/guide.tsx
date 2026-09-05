@@ -19,9 +19,17 @@ import {
 import { Card } from './primitives'
 import { FormulaText, VariableName } from './FormulaText'
 
-/** Write formulas as text in guide prose: <F>p → q</F>. */
-export function F({ children }: { children: string }) {
-  return <FormulaText formula={parse(children)} />
+/**
+ * Write formulas as text in guide prose: <F>p → q</F>.
+ *
+ * Always parsed, so a typo in a guide fails the render test rather than
+ * shipping. `keep` renders the source as written instead of reprinting it —
+ * for the rare case where the brackets you typed carry the point, such as the
+ * three pairs in (a ∧ b) ∨ (c ∧ d) ∨ (e ∧ f).
+ */
+export function F({ children, keep = false }: { children: string; keep?: boolean }) {
+  const parsed = parse(children)
+  return keep ? <FormulaText text={children} /> : <FormulaText formula={parsed} />
 }
 
 /**
