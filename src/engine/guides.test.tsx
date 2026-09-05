@@ -200,8 +200,10 @@ describe('categories', () => {
   })
 
   it('reports how much of a chapter is built', () => {
+    // Propositional is finished: every exercise type in the plan has a
+    // minigame, so built and total are equal rather than one short.
     const propositional = sectionProgress('propositional')
-    expect(propositional.total).toBeGreaterThan(propositional.built)
+    expect(propositional.built).toBe(propositional.total)
     expect(propositional.built).toBe(
       MINIGAMES.filter((game) => categoriesOf(game.topics).includes('propositional')).length,
     )

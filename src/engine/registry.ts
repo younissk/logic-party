@@ -9,16 +9,22 @@ import type { Category } from './categories'
 import { categoriesOf } from './categories'
 import { bcpGame } from '@/games/bcpFixpoint'
 import { blockedClausesGame } from '@/games/blockedClauses'
+import { blockedLiteralGame } from '@/games/blockedLiteral'
 import { cnfPipelineGame } from '@/games/cnfPipeline'
+import { colouringGame } from '@/games/colouring'
 import { conflictClauseGame } from '@/games/conflictClause'
 import { dpGame } from '@/games/dpEliminate'
 import { dpllGame } from '@/games/dpllLeaves'
 import { derivableGame } from '@/games/derivable'
+import { entailmentRefutationGame } from '@/games/entailmentRefutation'
 import { equivalenceGame } from '@/games/equivalence'
+import { modelSortGame } from '@/games/modelSort'
+import { oneStepGame } from '@/games/oneStep'
 import { learnedClauseGame } from '@/games/learnedClause'
 import { modelCountGame } from '@/games/modelCount'
 import { propertyGame } from '@/games/property'
 import { refutationGame } from '@/games/refutation'
+import { rupBuilderGame } from '@/games/rupBuilder'
 import { rupGame } from '@/games/rupProof'
 import { resolventsGame } from '@/games/resolvents'
 import { tseitinGame } from '@/games/tseitin'
@@ -48,6 +54,12 @@ export const MINIGAMES: readonly AnyMinigame[] = [
   learnedClauseGame,
   rupGame,
   blockedClausesGame,
+  modelSortGame,
+  colouringGame,
+  oneStepGame,
+  entailmentRefutationGame,
+  rupBuilderGame,
+  blockedLiteralGame,
 ]
 
 export function getMinigame(id: string): AnyMinigame | undefined {
