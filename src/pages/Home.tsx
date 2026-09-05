@@ -3,6 +3,8 @@ import { CATEGORIES, topicsInCategory } from '@/engine/categories'
 import { minigamesInCategory, MINIGAMES } from '@/engine/registry'
 import { TOPIC_LABELS } from '@/engine/types'
 import { Card } from '@/ui/primitives'
+import { Search } from '@/ui/Search'
+import { skillTree, summarise } from '@/engine/skillTree'
 import { currentStreak, overallStats, statsForTopic, useProgress, weakestTopics } from '@/store/progress'
 import type { ProgressState } from '@/store/progress'
 import type { CategoryInfo } from '@/engine/categories'
@@ -11,6 +13,7 @@ export function Home() {
   const progress = useProgress()
   const stats = overallStats(progress)
   const streak = currentStreak(progress)
+  const tree = summarise(skillTree(progress))
 
   const practisedTopics = MINIGAMES.flatMap((game) => game.topics)
   const weak = weakestTopics([...new Set(practisedTopics)], progress).slice(0, 3)
@@ -21,6 +24,27 @@ export function Home() {
         <h1 className="shout text-5xl text-coin">Logic Party</h1>
         <p className="mt-2 font-semibold text-ink">Computational logic, one minigame at a time.</p>
       </header>
+
+      <Search />
+
+      <Link to="/tree" className="block active:translate-y-1">
+        <Card className="bg-coin">
+          <div className="flex items-center gap-3">
+            <span className="space flex h-12 w-12 shrink-0 items-center justify-center bg-card text-2xl" aria-hidden>
+              🌳
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-lg font-bold">Skill Tree</h2>
+              <p className="text-sm font-semibold text-ink-soft">
+                {tree.cleared} cleared · {tree.available} open · {tree.locked + tree.unbuilt} still shut
+              </p>
+            </div>
+            <span className="text-xl" aria-hidden>
+              ›
+            </span>
+          </div>
+        </Card>
+      </Link>
 
       <div className="grid grid-cols-3 gap-3">
         <Stat label="Answered" value={String(stats.attempts)} />

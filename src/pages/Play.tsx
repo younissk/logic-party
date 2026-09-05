@@ -12,6 +12,7 @@ import {
 } from '@/engine/types'
 import type { Difficulty, RoundFormat } from '@/engine/types'
 import { randomSeed } from '@/logic'
+import { CLEAR_ACCURACY, CLEAR_ATTEMPTS, unlockStateFor } from '@/engine/skillTree'
 import { Button, Card, Star } from '@/ui/primitives'
 import { formatDuration, getBestTime, getHighScore, useProgress } from '@/store/progress'
 
@@ -61,6 +62,62 @@ export function Play() {
           </Button>
         </Link>
       </Card>
+    )
+  }
+
+  const unlock = unlockStateFor(game.id, progress)
+  const locked = unlock?.state === 'locked' && params.get('anyway') !== '1'
+
+  if (locked && unlock !== undefined) {
+    return (
+      <div className="flex flex-col gap-4">
+        <Link to="/tree" className="text-sm font-bold text-ink hover:underline">
+          ← Skill tree
+        </Link>
+
+        <header className="pt-2 text-center">
+          <span className="space inline-flex h-20 w-20 items-center justify-center bg-card-shade text-4xl">
+            🔒
+          </span>
+          <h1 className="shout mt-3 text-3xl text-white">{game.title}</h1>
+          <p className="mt-1 font-semibold text-ink">Locked for now.</p>
+        </header>
+
+        <Card>
+          <h2 className="text-sm font-bold uppercase tracking-widest text-ink-soft">Clear these first</h2>
+          <ul className="mt-3 flex flex-col gap-2">
+            {unlock.blockedBy.map((item) => (
+              <li key={item.id}>
+                {item.game === undefined ? (
+                  <span className="block rounded-xl bg-card-shade px-3 py-2 text-sm font-semibold text-ink-soft">
+                    {item.title} — not built yet
+                  </span>
+                ) : (
+                  <Link
+                    to={`/play/${item.game}`}
+                    className="block rounded-xl bg-card-shade px-3 py-2 text-sm font-semibold hover:bg-coin"
+                  >
+                    {item.title}
+                  </Link>
+                )}
+              </li>
+            ))}
+          </ul>
+          {unlock.item.why !== undefined && (
+            <p className="mt-3 text-sm font-medium text-ink-soft">{unlock.item.why}</p>
+          )}
+          <p className="mt-2 text-xs font-medium text-ink-soft">
+            A skill clears at {CLEAR_ATTEMPTS} answers and {Math.round(CLEAR_ACCURACY * 100)}% accuracy.
+          </p>
+        </Card>
+
+        <Button variant="secondary" onClick={() => setParam('anyway', '1')}>
+          Practise it anyway
+        </Button>
+        <p className="text-center text-xs font-medium text-ink">
+          The tree is a study order, not a wall. Nothing stops you jumping ahead.
+        </p>
+      </div>
     )
   }
 

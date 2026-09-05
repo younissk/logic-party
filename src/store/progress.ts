@@ -45,6 +45,9 @@ export interface ProgressState {
 
 const EMPTY: ProgressState = { version: 1, attempts: [], highScores: {}, bestTimes: {} }
 
+/** A fresh, untouched progress state — for tests and for "what would a new player see". */
+export const emptyProgress = (): ProgressState => ({ ...EMPTY, attempts: [] })
+
 function readStorage(): ProgressState {
   try {
     const raw = localStorage.getItem(STORAGE_KEY)

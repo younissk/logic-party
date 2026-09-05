@@ -210,7 +210,7 @@ function PlannedCard({
     return (
       <>
         {games.map((game) => (
-          <GameCard key={game.id} item={{ title: game.title, source: '' }} game={game} progress={progress} />
+          <GameCard key={game.id} item={{ id: game.id, title: game.title, source: '' }} game={game} progress={progress} />
         ))}
       </>
     )

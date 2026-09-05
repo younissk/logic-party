@@ -8,8 +8,12 @@ import type { AnyMinigame, Minigame, Topic } from './types'
 import type { Category } from './categories'
 import { categoriesOf } from './categories'
 import { cnfPipelineGame } from '@/games/cnfPipeline'
+import { derivableGame } from '@/games/derivable'
+import { equivalenceGame } from '@/games/equivalence'
 import { modelCountGame } from '@/games/modelCount'
 import { propertyGame } from '@/games/property'
+import { refutationGame } from '@/games/refutation'
+import { resolventsGame } from '@/games/resolvents'
 import { tseitinGame } from '@/games/tseitin'
 import { truthTableGame } from '@/games/truthTable'
 
@@ -20,7 +24,17 @@ export function defineMinigame<Question, Answer>(
   return game
 }
 
-export const MINIGAMES: readonly AnyMinigame[] = [truthTableGame, propertyGame, modelCountGame, cnfPipelineGame, tseitinGame]
+export const MINIGAMES: readonly AnyMinigame[] = [
+  truthTableGame,
+  propertyGame,
+  modelCountGame,
+  cnfPipelineGame,
+  tseitinGame,
+  equivalenceGame,
+  resolventsGame,
+  derivableGame,
+  refutationGame,
+]
 
 export function getMinigame(id: string): AnyMinigame | undefined {
   return MINIGAMES.find((game) => game.id === id)

@@ -23,6 +23,8 @@ export type Category = 'propositional' | 'equational' | 'first-order' | 'fol-the
  * happen to be built.
  */
 export interface SyllabusItem {
+  /** Stable slug. Referred to by `requires`, so never rename one. */
+  id: string
   /**
    * Position in the study plan. Warm-ups that sit outside the numbered plan
    * leave this off rather than shifting everything after them.
@@ -33,6 +35,17 @@ export interface SyllabusItem {
   source: string
   /** Minigame id, when one exists. */
   game?: string
+  /**
+   * Items you need first, by id.
+   *
+   * Genuine conceptual dependencies, not the reading order: Tseitin requires
+   * the naive pipeline because its entire selling point is the blowup you only
+   * appreciate once you have felt it, and counting models requires classifying
+   * them because "how many" is meaningless until "any at all" is settled.
+   */
+  requires?: string[]
+  /** One line on why the prerequisites are what they are. Shown when locked. */
+  why?: string
 }
 
 export interface Section {
@@ -84,21 +97,28 @@ const PROPOSITIONAL_SECTIONS: Section[] = [
     title: 'Semantics & basics',
     items: [
       {
+        id: 'truth-tables',
         title: 'Truth tables — evaluate a formula row by row',
         source: 'ln §2.1 · warm-up',
         game: 'truth-table',
       },
       {
+        id: 'properties',
         n: 1,
         title: 'Property classification — satisfiable, valid, refutable, unsatisfiable',
         source: 'Exercise 1 · ln §2.1',
         game: 'property-check',
+        requires: ['truth-tables'],
+        why: 'Every property is a statement about a formula\u2019s column. You have to be able to fill one in first.',
       },
       {
+        id: 'model-count',
         n: 2,
         title: 'Counting models of a CNF',
         source: 'exam25a Q1.1a · Exercise 1 · ln §2.1',
         game: 'model-count',
+        requires: ['properties'],
+        why: '\u201cHow many models\u201d is meaningless until \u201cany at all\u201d is settled.',
       },
     ],
   },
@@ -107,21 +127,31 @@ const PROPOSITIONAL_SECTIONS: Section[] = [
     title: 'Normal forms',
     items: [
       {
+        id: 'cnf',
         n: 3,
         title: 'Naive CNF transformation — De Morgan and distributivity',
         source: 'ln §2.2',
         game: 'cnf-pipeline',
+        requires: ['truth-tables'],
+        why: 'Every step of the pipeline is an equivalence. You need to be able to check one.',
       },
       {
+        id: 'tseitin',
         n: 4,
         title: 'Tseitin transformation — which clauses appear',
         source: 'Exercise 2 · ln Algorithm 2.19',
         game: 'tseitin',
+        requires: ['cnf'],
+        why: 'Tseitin exists to dodge the distribution blowup. Feel the blowup first or it looks like pointless extra machinery.',
       },
       {
+        id: 'sat-equivalence',
         n: 5,
         title: 'Equivalent vs. satisfiability-equivalent',
         source: 'ln Definition 2.21',
+        game: 'equivalence',
+        requires: ['model-count', 'tseitin'],
+        why: 'The distinction is about model sets, and its headline example is Tseitin.',
       },
     ],
   },
@@ -130,12 +160,32 @@ const PROPOSITIONAL_SECTIONS: Section[] = [
     title: 'Resolution',
     items: [
       {
+        id: 'resolvents',
         n: 6,
         title: 'Compute all resolvents, including tautological ones',
         source: 'exam25a Q1.1b · ln Definition 2.22',
+        game: 'resolvents',
+        requires: ['cnf'],
+        why: 'Resolution works on clauses. You need to be able to produce clauses.',
       },
-      { n: 7, title: 'Is clause X derivable?', source: 'exam26a and exam26bA Q1.1' },
-      { n: 8, title: 'Build a resolution refutation', source: 'ln §2.3' },
+      {
+        id: 'derivable',
+        n: 7,
+        title: 'Is clause X derivable?',
+        source: 'exam26a and exam26bA Q1.1',
+        game: 'derivable',
+        requires: ['resolvents', 'model-count'],
+        why: 'The first move is BCP to decide satisfiability; the second is the resolution rule.',
+      },
+      {
+        id: 'refutation',
+        n: 8,
+        title: 'Build a resolution refutation',
+        source: 'ln §2.3',
+        game: 'refutation',
+        requires: ['resolvents'],
+        why: 'A refutation is a chain of single resolution steps.',
+      },
     ],
   },
   {
@@ -143,18 +193,45 @@ const PROPOSITIONAL_SECTIONS: Section[] = [
     title: 'Solving',
     items: [
       {
+        id: 'bcp',
         n: 9,
         title: 'BCP until fixpoint — what formula remains',
         source: 'exam25a Q1.1c · ln Definition 2.39',
+        requires: ['model-count'],
+        why: 'Propagation is already the first step of counting models.',
       },
       {
+        id: 'dp',
         n: 10,
         title: 'DP procedure — variable elimination, decide SAT or UNSAT',
         source: 'exam26a and exam26bA Q1.2',
+        requires: ['resolvents'],
+        why: 'Eliminating a variable means resolving every pair that clashes on it.',
       },
-      { n: 11, title: 'DPLL decision tree — build it, count leaves', source: 'Exercise 3 · ln §2.4' },
-      { n: 12, title: 'Refutation matching a given DPLL tree', source: 'exam25a Q1.2' },
-      { n: 13, title: 'CDCL and learned clauses — conflict analysis', source: 'ln §2.4 · Example 2.45' },
+      {
+        id: 'dpll',
+        n: 11,
+        title: 'DPLL decision tree — build it, count leaves',
+        source: 'Exercise 3 · ln §2.4',
+        requires: ['bcp'],
+        why: 'DPLL is decide, then propagate. The propagation half has to be automatic.',
+      },
+      {
+        id: 'dpll-refutation',
+        n: 12,
+        title: 'Refutation matching a given DPLL tree',
+        source: 'exam25a Q1.2',
+        requires: ['dpll', 'refutation'],
+        why: 'The hybrid: it asks you to read a tree and write the resolution proof it corresponds to.',
+      },
+      {
+        id: 'cdcl',
+        n: 13,
+        title: 'CDCL and learned clauses — conflict analysis',
+        source: 'ln §2.4 · Example 2.45',
+        requires: ['dpll'],
+        why: 'CDCL is DPLL that learns from its conflicts.',
+      },
     ],
   },
   {
@@ -162,14 +239,20 @@ const PROPOSITIONAL_SECTIONS: Section[] = [
     title: 'Certificates',
     items: [
       {
+        id: 'rup',
         n: 14,
         title: 'RUP proof — extend the formula step by step to ⊥',
         source: 'exam26a and exam26bA Q1.3 · Exercise 3 · ln §2.5',
+        requires: ['bcp', 'refutation'],
+        why: 'A RUP check is BCP on the formula with the candidate clause negated.',
       },
       {
+        id: 'bce',
         n: 15,
         title: 'Blocked clause elimination — prove SAT by deleting',
         source: 'exam25a Q1.3 · exam26bA bonus',
+        requires: ['resolvents', 'sat-equivalence'],
+        why: 'Deleting a clause changes the model set, so it is only legal because satisfiability survives.',
       },
     ],
   },
