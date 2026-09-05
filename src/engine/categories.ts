@@ -23,68 +23,64 @@ export interface CategoryInfo {
   /** Tailwind background class for that token. */
   colour: string
   /**
-   * Exercise types expected to live here, shown while the category is empty.
-   *
-   * PLACEHOLDERS — edit these to match the actual syllabus as you work
-   * through it. They exist so an empty category says what it is *for*.
+   * The chapter's sections, shown while the category has no minigames yet, so
+   * an empty category still says what it is *for*. Taken from the course notes.
    */
   planned: string[]
 }
 
+/**
+ * The five chapters of the lecture notes, minus the introduction.
+ *
+ * Section lists are taken from the contents page of the course notes (JKU
+ * Computational Logic for AI, WS 2025/2026), not invented — so `planned` says
+ * what will actually be examined rather than what sounds plausible.
+ */
 export const CATEGORIES: readonly CategoryInfo[] = [
   {
     id: 'propositional',
     title: 'Propositional Logic',
-    blurb: 'Connectives, truth tables, normal forms, satisfiability, resolution.',
+    blurb: 'Syntax and semantics, normal forms, resolution, solving, certificates.',
     icon: '∧',
     colour: 'bg-space-blue text-white',
     planned: [
-      'Truth tables',
-      'Tautology, contradiction, contingency',
-      'CNF and DNF',
-      'Satisfiability and models',
+      'Syntax and semantics',
+      'Normal forms',
       'Resolution',
+      'Solving',
+      'Certificates',
     ],
   },
   {
     id: 'equational',
     title: 'Equational Reasoning',
-    blurb: 'Rewriting one formula into another, one justified equivalence at a time.',
+    // Not propositional equivalence laws — this chapter is about terms and
+    // rewriting: unification, normal forms, Knuth-Bendix completion.
+    blurb: 'Terms, substitution and unification, rewriting to normal form, completion.',
     icon: '=',
     colour: 'bg-grass text-white',
-    planned: [
-      'Equivalence laws (De Morgan, distribution, absorption)',
-      'Proving two formulas equivalent by rewriting',
-      'Simplification chains',
-      'Substitution of equals for equals',
-    ],
+    planned: ['Terms', 'Substitution and unification', 'Normal forms', 'Completion'],
   },
   {
     id: 'first-order',
     title: 'First-Order Logic',
-    blurb: 'Quantifiers, variables, structures and what makes a formula true in one.',
+    blurb: 'Syntax and semantics, normal forms, resolution, and equality.',
     icon: '∀',
     colour: 'bg-space-red text-white',
     planned: [
-      'Reading and writing quantified formulas',
-      'Free and bound variables, scope',
-      'Models and countermodels',
-      'Prenex form and Skolemisation',
-      'Unification',
+      'Syntax and semantics',
+      'Normal forms',
+      'Resolution',
+      'First-order logic with equality',
     ],
   },
   {
     id: 'fol-theories',
     title: 'Theories in First-Order Logic',
-    blurb: 'Reasoning inside a fixed theory: equality, orders, arithmetic.',
+    blurb: 'Quantifier elimination, the natural numbers, the real numbers.',
     icon: '⊨',
     colour: 'bg-plum text-white',
-    planned: [
-      'Axioms and their consequences',
-      'Equality and congruence',
-      'Satisfiability modulo a theory',
-      'Decidable and undecidable fragments',
-    ],
+    planned: ['Quantifier elimination', 'Natural numbers', 'Real numbers'],
   },
 ]
 
@@ -107,7 +103,9 @@ export const TOPIC_CATEGORY: Readonly<Record<Topic, Category>> = {
   entailment: 'propositional',
   resolution: 'propositional',
   'proof-systems': 'propositional',
-  equivalence: 'equational',
+  // Propositional equivalence lives in chapter 2, not chapter 3: "Equational
+  // Reasoning" in this course means term rewriting, not equivalence laws.
+  equivalence: 'propositional',
 }
 
 export function topicsInCategory(category: Category): Topic[] {

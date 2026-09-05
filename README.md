@@ -114,12 +114,17 @@ override every `bg-*` class put on a card.
 
 The app is organised by the four chapters of the course:
 
-| | |
+| Chapter | Sections |
 |---|---|
-| **Propositional Logic** | connectives, truth tables, normal forms, satisfiability, resolution |
-| **Equational Reasoning** | rewriting one formula into another, one justified equivalence at a time |
-| **First-Order Logic** | quantifiers, structures, models, unification |
-| **Theories in First-Order Logic** | reasoning inside a fixed theory: equality, orders, arithmetic |
+| **Propositional Logic** | syntax and semantics · normal forms · resolution · solving · certificates |
+| **Equational Reasoning** | terms · substitution and unification · normal forms · completion |
+| **First-Order Logic** | syntax and semantics · normal forms · resolution · logic with equality |
+| **Theories in First-Order Logic** | quantifier elimination · natural numbers · real numbers |
+
+Taken from the contents page of the course notes, not invented. Note that
+*Equational Reasoning* here means **term rewriting** — unification, normal
+forms, completion — not propositional equivalence laws, which belong to
+chapter 2.
 
 Two different things, deliberately:
 
@@ -130,10 +135,8 @@ A minigame declares only its topics; its category *follows* from them via
 `TOPIC_CATEGORY`, so the two cannot disagree and a new topic without a home is
 a type error rather than something that quietly vanishes from the navigation.
 
-An empty category shows the exercises planned for it. Those lists are
-**placeholders** — edit `planned` in
-[`src/engine/categories.ts`](src/engine/categories.ts) to match the real
-syllabus.
+An empty category shows its chapter's sections, so it still says what it is
+for. The course PDFs themselves live in [`docs/`](docs/README.md), git-ignored.
 
 ## Guides
 

@@ -68,8 +68,8 @@ describe('categories', () => {
     }
   })
 
-  it('does not lose a topic when a minigame covers several', () => {
-    const topics: Topic[] = ['truth-tables', 'equivalence']
-    expect(categoriesOf(topics).sort()).toEqual(['equational', 'propositional'])
+  it('de-duplicates when several topics share a chapter', () => {
+    const topics: Topic[] = ['truth-tables', 'equivalence', 'resolution']
+    expect(categoriesOf(topics)).toEqual(['propositional'])
   })
 })
