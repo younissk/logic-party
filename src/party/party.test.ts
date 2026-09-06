@@ -16,15 +16,23 @@ import {
 import {
   FORK_AT,
   RUN_LENGTH,
+  SHOPS_AT,
   buildRun,
+  canReroll,
+  canSwap,
   cardOf,
   difficultyOf,
   gameOf,
   isFork,
+  isShop,
+  rerollGame,
   streakOf,
+  swapCard,
   totalsFor,
+  type Stop,
   type StopRecord,
 } from './run'
+import { ITEMS, addItem, canAfford, heldOf, holdsAny, itemById, purseOf, useItem } from './items'
 
 const DIFFICULTIES: readonly Difficulty[] = ['easy', 'medium', 'hard']
 
@@ -69,7 +77,14 @@ describe('rule cards', () => {
 
 describe('what a stop pays', () => {
   const stop = (over: Partial<Parameters<typeof payoutFor>[0]> = {}) =>
-    payoutFor({ card: STRAIGHT_UP, correct: 3, asked: 3, elapsedMs: 9_000, streak: 0, ...over })
+    payoutFor({
+      card: STRAIGHT_UP,
+      correct: 3,
+      asked: 3,
+      elapsedMs: 9_000,
+      streak: 0,
+      ...over,
+    })
 
   it('pays per correct answer plus an all-clear bonus', () => {
     expect(stop().total).toBe(PAYOUT.perCorrect * 3 + PAYOUT.allClear)
@@ -99,9 +114,27 @@ describe('what a stop pays', () => {
 
   it('pays a speed bonus only on a capped card, and only when perfect', () => {
     const trap = cardById('speed-trap')
-    const fast = payoutFor({ card: trap, correct: 3, asked: 3, elapsedMs: 5_000, streak: 0 })
-    const slow = payoutFor({ card: trap, correct: 3, asked: 3, elapsedMs: 18_000, streak: 0 })
-    const sloppy = payoutFor({ card: trap, correct: 2, asked: 3, elapsedMs: 1_000, streak: 0 })
+    const fast = payoutFor({
+      card: trap,
+      correct: 3,
+      asked: 3,
+      elapsedMs: 5_000,
+      streak: 0,
+    })
+    const slow = payoutFor({
+      card: trap,
+      correct: 3,
+      asked: 3,
+      elapsedMs: 18_000,
+      streak: 0,
+    })
+    const sloppy = payoutFor({
+      card: trap,
+      correct: 2,
+      asked: 3,
+      elapsedMs: 1_000,
+      streak: 0,
+    })
     expect(fast.speed).toBe(PAYOUT.speed)
     expect(slow.speed).toBe(0)
     expect(sloppy.speed).toBe(0)
@@ -111,14 +144,22 @@ describe('what a stop pays', () => {
 
   it('pays Double Or Nothing nothing at all for a near miss', () => {
     const card = cardById('double-or-nothing')
-    expect(payoutFor({ card, correct: 3, asked: 3, elapsedMs: 0, streak: 0 }).total).toBeGreaterThan(0)
+    expect(
+      payoutFor({ card, correct: 3, asked: 3, elapsedMs: 0, streak: 0 }).total,
+    ).toBeGreaterThan(0)
     expect(payoutFor({ card, correct: 2, asked: 3, elapsedMs: 0, streak: 0 }).total).toBe(0)
   })
 
   it('does not pay Sudden Death the all-clear bonus for a stop it cut short', () => {
     // One right and then out is not a clear round, however few were asked.
     const card = cardById('sudden-death')
-    const cut = payoutFor({ card, correct: 1, asked: 2, elapsedMs: 0, streak: 0 })
+    const cut = payoutFor({
+      card,
+      correct: 1,
+      asked: 2,
+      elapsedMs: 0,
+      streak: 0,
+    })
     expect(cut.perfect).toBe(false)
     expect(cut.allClear).toBe(0)
     expect(cut.total).toBe(PAYOUT.perCorrect * 1 * card.multiplier)
@@ -201,9 +242,30 @@ describe('building a run', () => {
     const known = new Set(MINIGAMES.map((game) => game.id))
     for (let seed = 0; seed < 40; seed++) {
       for (const stop of run(`s${seed}`).stops) {
+        if (isShop(stop)) continue
         for (const id of stop.games) expect(known.has(id), id).toBe(true)
         expect(() => gameOf(stop)).not.toThrow()
       }
+    }
+  })
+
+  it('puts a shop where the plan says, and nothing else there', () => {
+    for (let seed = 0; seed < 40; seed++) {
+      const stops = run(`s${seed}`).stops
+      const shops = stops.filter(isShop).map((stop) => stop.number)
+      expect(shops).toEqual([...SHOPS_AT])
+      for (const stop of stops.filter(isShop)) {
+        expect(stop.games).toEqual([])
+        expect(isFork(stop)).toBe(false)
+      }
+    }
+  })
+
+  it('leaves every other stop playable', () => {
+    for (let seed = 0; seed < 20; seed++) {
+      const playable = run(`s${seed}`).stops.filter((stop) => !isShop(stop))
+      expect(playable).toHaveLength(RUN_LENGTH - SHOPS_AT.length)
+      for (const stop of playable) expect(stop.games.length).toBeGreaterThan(0)
     }
   })
 
@@ -231,6 +293,7 @@ describe('building a run', () => {
   it.each(DIFFICULTIES)('plays at the run difficulty except on the boss, from %s', (difficulty) => {
     const built = run('diff', difficulty)
     for (const stop of built.stops) {
+      if (isShop(stop)) continue
       const wanted = cardOf(stop).difficulty ?? difficulty
       expect(difficultyOf(built, stop)).toBe(wanted)
     }
@@ -241,7 +304,7 @@ describe('building a run', () => {
     for (let seed = 0; seed < 60; seed++) {
       const built = run(`g${seed}`, 'medium', 'herbrand')
       for (const stop of built.stops) {
-        if (cardOf(stop).weakestTopic !== true) continue
+        if (isShop(stop) || cardOf(stop).weakestTopic !== true) continue
         for (const id of stop.games) {
           const game = MINIGAMES.find((entry) => entry.id === id)
           expect(game?.topics, `${id} is not a herbrand game`).toContain('herbrand')
@@ -254,14 +317,16 @@ describe('building a run', () => {
     // A brand new player has no weakest topic. The stop has to exist anyway.
     for (let seed = 0; seed < 40; seed++) {
       const built = run(`n${seed}`, 'medium', null)
-      for (const stop of built.stops) expect(() => gameOf(stop)).not.toThrow()
+      for (const stop of built.stops.filter((stop) => !isShop(stop))) {
+        expect(() => gameOf(stop)).not.toThrow()
+      }
     }
   })
 
   it('deals every card eventually', () => {
     const seen = new Set<string>()
     for (let seed = 0; seed < 200; seed++) {
-      for (const stop of run(`c${seed}`).stops) seen.add(stop.cardId)
+      for (const stop of run(`c${seed}`).stops) if (!isShop(stop)) seen.add(stop.cardId)
     }
     for (const card of CARDS) expect(seen, card.id).toContain(card.id)
   })
@@ -294,7 +359,11 @@ describe('totals', () => {
   })
 
   it('remembers the best-paying stop', () => {
-    const totals = totalsFor([record({ coins: 10 }), record({ number: 2, coins: 90 }), record({ number: 3, coins: 40 })])
+    const totals = totalsFor([
+      record({ coins: 10 }),
+      record({ number: 2, coins: 90 }),
+      record({ number: 3, coins: 40 }),
+    ])
     expect(totals.best?.number).toBe(2)
   })
 
@@ -303,5 +372,120 @@ describe('totals', () => {
     expect(streakOf([record(), record()])).toBe(2)
     expect(streakOf([record(), record({ perfect: false })])).toBe(0)
     expect(streakOf([record({ perfect: false }), record(), record()])).toBe(2)
+  })
+})
+
+describe('shop items', () => {
+  it('has unique ids and a real explanation each', () => {
+    expect(new Set(ITEMS.map((item) => item.id)).size).toBe(ITEMS.length)
+    for (const item of ITEMS) {
+      expect(item.price, item.id).toBeGreaterThan(0)
+      expect(item.blurb.length, item.id).toBeGreaterThan(20)
+      expect(item.when.length, item.id).toBeGreaterThan(10)
+    }
+  })
+
+  it('prices everything within reach of one good stop', () => {
+    // An item nobody can afford before the run ends is not an item. The
+    // cheapest has to be buyable off a single clean Straight Up stop.
+    const cheapest = Math.min(...ITEMS.map((item) => item.price))
+    expect(cheapest).toBeLessThanOrEqual(maximumFor(cardById('straight-up')))
+  })
+
+  it('falls back rather than returning nothing for an unknown id', () => {
+    expect(itemById('nonsense' as never)).toBe(ITEMS[0])
+  })
+
+  it('adds and spends without mutating', () => {
+    const empty = {}
+    const one = addItem(empty, 'shield')
+    expect(empty).toEqual({})
+    expect(heldOf(one, 'shield')).toBe(1)
+    const two = addItem(one, 'shield')
+    expect(heldOf(two, 'shield')).toBe(2)
+    expect(heldOf(useItem(two, 'shield'), 'shield')).toBe(1)
+  })
+
+  it('cannot go below zero, even if the caller forgets to check', () => {
+    const empty = {}
+    expect(useItem(empty, 'reroll')).toEqual(empty)
+    expect(heldOf(useItem(empty, 'reroll'), 'reroll')).toBe(0)
+  })
+
+  it('knows when the bag is empty', () => {
+    expect(holdsAny({})).toBe(false)
+    expect(holdsAny({ shield: 0 })).toBe(false)
+    expect(holdsAny({ shield: 1 })).toBe(true)
+  })
+
+  it('spends the run purse, not the bank', () => {
+    expect(purseOf(200, 60)).toBe(140)
+    // Overspending is arithmetic that must not produce a negative payout.
+    expect(purseOf(50, 90)).toBe(0)
+    expect(canAfford(100, 0, itemById('shield'))).toBe(true)
+    expect(canAfford(100, 40, itemById('shield'))).toBe(false)
+  })
+})
+
+describe('what an item does to a stop', () => {
+  const runOf = (seed: string) => buildRun({ seed, difficulty: 'medium', weakest: null })
+  const gameStop = (seed: string): Stop => runOf(seed).stops.find((stop) => canReroll(stop)) as Stop
+
+  it('offers a reroll on an ordinary stop and not at the fork', () => {
+    const stops = runOf('items').stops
+    expect(stops.filter(canReroll).every((stop) => !isFork(stop) && !isShop(stop))).toBe(true)
+    expect(canReroll(stops[FORK_AT - 1] as Stop)).toBe(false)
+    expect(canReroll(stops[SHOPS_AT[0]! - 1] as Stop)).toBe(false)
+  })
+
+  it('offers a card swap everywhere but the Boss and the shops', () => {
+    const stops = runOf('items').stops
+    expect(canSwap(stops[RUN_LENGTH - 1] as Stop)).toBe(false)
+    expect(canSwap(stops[SHOPS_AT[0]! - 1] as Stop)).toBe(false)
+    expect(canSwap(stops[1] as Stop)).toBe(true)
+  })
+
+  it('rerolls to a different game', () => {
+    for (let seed = 0; seed < 30; seed++) {
+      const stop = gameStop(`r${seed}`)
+      const after = rerollGame(stop, null, seed)
+      expect(after.games).toHaveLength(1)
+      expect(after.games[0]).not.toBe(stop.games[0])
+      // Everything else about the stop is untouched.
+      expect(after.cardId).toBe(stop.cardId)
+      expect(after.number).toBe(stop.number)
+      expect(after.seed).toBe(stop.seed)
+    }
+  })
+
+  it('keeps a rerolled Grudge Match inside the weakest topic', () => {
+    // The item buys a different question, never a way out of the topic.
+    for (let seed = 0; seed < 60; seed++) {
+      const stop = runOf(`w${seed}`).stops.find(
+        (entry) => cardOf(entry).weakestTopic === true && canReroll(entry),
+      )
+      if (stop === undefined) continue
+      const after = rerollGame(stop, 'herbrand', seed)
+      const game = MINIGAMES.find((entry) => entry.id === after.games[0])
+      expect(game?.topics, after.games[0]).toContain('herbrand')
+    }
+  })
+
+  it('swaps to a different card that the wheel could have dealt', () => {
+    for (let seed = 0; seed < 30; seed++) {
+      const stop = runOf(`s${seed}`).stops.find(canSwap) as Stop
+      const after = swapCard(stop, seed)
+      expect(after.cardId).not.toBe(stop.cardId)
+      expect(WHEEL_CARDS.map((card) => card.id)).toContain(after.cardId)
+      expect(after.games).toEqual(stop.games)
+    }
+  })
+
+  it('gives a different result each time it is used', () => {
+    // The nonce is what stops a second reroll handing back the first one.
+    const stop = gameStop('nonce')
+    const first = rerollGame(stop, null, 0)
+    const second = rerollGame(first, null, 1)
+    expect(second.games[0]).not.toBe(first.games[0])
   })
 })

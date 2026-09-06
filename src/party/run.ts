@@ -7,12 +7,14 @@
  *
  * The shape is fixed on purpose:
  *
- *   stop 1    Straight Up, whatever game comes up. A warm-up, so the first
- *             thing that happens is not Sudden Death on your worst topic.
- *   stop 6    a fork: two games face up, you pick. The one stop where the
- *             wheel does not decide for you.
- *   stop 12   Boss Fight. Hard, five questions, triple pay.
- *   the rest  wheel picks the game, deck picks the card.
+ *   stop 1     Straight Up, whatever game comes up. A warm-up, so the first
+ *              thing that happens is not Sudden Death on your worst topic.
+ *   stops 4, 9 a shop. Spend what the run has earned so far on items for the
+ *              stops still to come.
+ *   stop 6     a fork: two games face up, you pick. The one stop where the
+ *              wheel does not decide for you.
+ *   stop 12    Boss Fight. Hard, five questions, triple pay.
+ *   the rest   wheel picks the game, deck picks the card.
  *
  * No stop can end the run. See cards.ts for why.
  */
@@ -26,10 +28,14 @@ import { BOSS_FIGHT, STRAIGHT_UP, WHEEL_CARDS, cardById, type RuleCard } from '.
 export const RUN_LENGTH = 12
 export const FORK_AT = 6
 
+/** Stops that are a shop rather than a minigame. */
+export const SHOPS_AT: readonly number[] = [4, 9]
+
 export interface Stop {
   /** 1-based, as shown on the track. */
   number: number
-  /** Minigame ids. One, or two when the stop is a fork. */
+  kind: 'game' | 'shop'
+  /** Minigame ids. One, or two when the stop is a fork. Empty at a shop. */
   games: string[]
   cardId: string
   /** Seed for the round itself. */
@@ -46,8 +52,10 @@ export const cardOf = (stop: Stop): RuleCard => cardById(stop.cardId)
 
 export const isFork = (stop: Stop): boolean => stop.games.length > 1
 
+export const isShop = (stop: Stop): boolean => stop.kind === 'shop'
+
 export function gameOf(stop: Stop, choice = 0): AnyMinigame {
-  const id = stop.games[Math.min(choice, stop.games.length - 1)]
+  const id = stop.games[Math.max(0, Math.min(choice, stop.games.length - 1))]
   const game = MINIGAMES.find((entry) => entry.id === id)
   if (game === undefined) throw new Error(`No minigame called ${id}`)
   return game
@@ -86,7 +94,12 @@ const gamesForTopic = (topic: Topic): AnyMinigame[] =>
  * from all of them. When the weakest topic is unknown or has no games, it
  * falls back to the whole list rather than dealing nothing.
  */
-function pickGame(rng: Rng, card: RuleCard, weakest: WeakestTopic, avoid: Set<string>): AnyMinigame {
+function pickGame(
+  rng: Rng,
+  card: RuleCard,
+  weakest: WeakestTopic,
+  avoid: Set<string>,
+): AnyMinigame {
   const pool =
     card.weakestTopic === true && weakest !== null ? gamesForTopic(weakest) : [...MINIGAMES]
   const usable = pool.length > 0 ? pool : [...MINIGAMES]
@@ -108,12 +121,19 @@ export function buildRun({ seed, difficulty, weakest = null }: BuildOptions): Ru
   const used = new Set<string>()
 
   for (let number = 1; number <= RUN_LENGTH; number++) {
+    if (SHOPS_AT.includes(number)) {
+      stops.push({
+        number,
+        kind: 'shop',
+        games: [],
+        cardId: STRAIGHT_UP.id,
+        seed: `${seed}:${number}`,
+      })
+      continue
+    }
+
     const card =
-      number === RUN_LENGTH
-        ? BOSS_FIGHT
-        : number === 1
-          ? STRAIGHT_UP
-          : rng.pick([...WHEEL_CARDS])
+      number === RUN_LENGTH ? BOSS_FIGHT : number === 1 ? STRAIGHT_UP : rng.pick([...WHEEL_CARDS])
 
     const games: string[] = []
     const wanted = number === FORK_AT ? 2 : 1
@@ -123,7 +143,13 @@ export function buildRun({ seed, difficulty, weakest = null }: BuildOptions): Ru
       used.add(game.id)
     }
 
-    stops.push({ number, games, cardId: card.id, seed: `${seed}:${number}` })
+    stops.push({
+      number,
+      kind: 'game',
+      games,
+      cardId: card.id,
+      seed: `${seed}:${number}`,
+    })
   }
 
   return { seed, difficulty, stops }
@@ -175,3 +201,35 @@ export function streakOf(records: readonly StopRecord[]): number {
   }
   return streak
 }
+
+// ---------------------------------------------------------------------------
+// What the shop items do to a stop
+// ---------------------------------------------------------------------------
+
+/**
+ * The same stop with a different minigame.
+ *
+ * Draws from the card's own pool, so a Grudge Match rerolled is still a
+ * Grudge Match — the item buys you a different question, not a way out of
+ * your worst topic.
+ */
+export function rerollGame(stop: Stop, weakest: WeakestTopic, nonce: number): Stop {
+  const rng = makeRng(`reroll:${stop.seed}:${nonce}`)
+  const avoid = new Set(stop.games)
+  const game = pickGame(rng, cardOf(stop), weakest, avoid)
+  return { ...stop, games: [game.id] }
+}
+
+/** The same stop under a different rule card. */
+export function swapCard(stop: Stop, nonce: number): Stop {
+  const rng = makeRng(`swap:${stop.seed}:${nonce}`)
+  const others = WHEEL_CARDS.filter((candidate) => candidate.id !== stop.cardId)
+  const card = rng.pick(others.length > 0 ? [...others] : [...WHEEL_CARDS])
+  return { ...stop, cardId: card.id }
+}
+
+/** A stop the Reroll item may be used on. The fork is already a choice. */
+export const canReroll = (stop: Stop): boolean => stop.kind === 'game' && !isFork(stop)
+
+/** A stop the Card Swap item may be used on. The Boss keeps its card. */
+export const canSwap = (stop: Stop): boolean => stop.kind === 'game' && stop.number !== RUN_LENGTH

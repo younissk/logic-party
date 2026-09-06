@@ -34,10 +34,25 @@ export interface PartyStopProps {
   card: RuleCard
   difficulty: Difficulty
   seed: string
+  /** A Shield was armed for this stop. */
+  shielded?: boolean
+  /** A Cash Out is held, so the stop may be ended early. */
+  canCashOut?: boolean
+  /** Called when the Cash Out is actually spent. */
+  onCashOut?: () => void
   onDone: (outcome: StopOutcome) => void
 }
 
-export function PartyStop({ game, card, difficulty, seed, onDone }: PartyStopProps) {
+export function PartyStop({
+  game,
+  card,
+  difficulty,
+  seed,
+  shielded = false,
+  canCashOut = false,
+  onCashOut,
+  onDone,
+}: PartyStopProps) {
   const round = useRound({
     game,
     difficulty,
@@ -52,11 +67,26 @@ export function PartyStop({ game, card, difficulty, seed, onDone }: PartyStopPro
   const [burst, setBurst] = useState(0)
   const ended = useRef(false)
 
+  /**
+   * The Shield, and what it has already forgiven.
+   *
+   * A forgiven answer counts as correct — which is what lets a shielded stop
+   * still be a clean one — so the count lives in a ref that `end` reads,
+   * rather than being folded into the round's own tally.
+   */
+  const [shieldLeft, setShieldLeft] = useState(shielded ? 1 : 0)
+  const [forgivenAt, setForgivenAt] = useState<number | null>(null)
+  const forgiven = useRef(0)
+
   const end = useCallback(
     (correct: number, asked: number) => {
       if (ended.current) return
       ended.current = true
-      onDone({ correct, asked, elapsedMs: Date.now() - startedAt.current })
+      onDone({
+        correct: correct + forgiven.current,
+        asked,
+        elapsedMs: Date.now() - startedAt.current,
+      })
     },
     [onDone],
   )
@@ -96,8 +126,19 @@ export function PartyStop({ game, card, difficulty, seed, onDone }: PartyStopPro
     const correct = round.correctCount
     const asked = round.answered
 
+    // A Shield spends itself on the first wrong answer, which then counts as
+    // right and cannot cut a Sudden Death stop short.
+    const wrong = !round.verdict.correct
+    const shielding = wrong && shieldLeft > 0
+    if (shielding) {
+      setShieldLeft(0)
+      setForgivenAt(round.index)
+      forgiven.current += 1
+      setBurst((count) => count + 1)
+    }
+
     // Sudden Death: the first wrong answer is the end of the stop.
-    if (card.stopOnWrong === true && !round.verdict.correct) {
+    if (card.stopOnWrong === true && wrong && !shielding) {
       end(correct, asked)
       return
     }
@@ -114,7 +155,7 @@ export function PartyStop({ game, card, difficulty, seed, onDone }: PartyStopPro
       return
     }
     return
-  }, [round.verdict, round.index, round.correctCount, round.answered, card, end])
+  }, [round.verdict, round.index, round.correctCount, round.answered, card, end, shieldLeft])
 
   useEffect(() => {
     if (round.finished) end(round.correctCount, round.answered)
@@ -133,9 +174,12 @@ export function PartyStop({ game, card, difficulty, seed, onDone }: PartyStopPro
           {card.name}
         </span>
         <span className="tabular-nums text-ink-soft">
+          {shieldLeft > 0 && <span className="mr-2">🛡️</span>}
           {Math.min(round.index + 1, card.questions)} / {card.questions}
           {secondsLeft !== null && (
-            <span className={`ml-2 ${secondsLeft <= 5 ? 'text-space-red' : ''}`}>{secondsLeft}s</span>
+            <span className={`ml-2 ${secondsLeft <= 5 ? 'text-space-red' : ''}`}>
+              {secondsLeft}s
+            </span>
           )}
         </span>
       </div>
@@ -169,16 +213,38 @@ export function PartyStop({ game, card, difficulty, seed, onDone }: PartyStopPro
       )}
 
       {round.verdict === null && round.question !== null && (
-        <Button variant="ghost" className="w-full !min-h-10 !text-sm" onClick={round.reveal}>
-          Skip this one — counts as wrong
-        </Button>
+        <div className="flex flex-col gap-1">
+          <Button variant="ghost" className="w-full !min-h-10 !text-sm" onClick={round.reveal}>
+            Skip this one — counts as wrong
+          </Button>
+          {canCashOut && (
+            <Button
+              variant="secondary"
+              className="w-full !min-h-10 !text-sm"
+              onClick={() => {
+                onCashOut?.()
+                end(round.correctCount, round.answered)
+              }}
+            >
+              💰 Cash out — keep the {round.correctCount} you have
+            </Button>
+          )}
+        </div>
       )}
 
       {!hide && round.verdict !== null && (
         <Pop
-          className={`tile p-3 ${round.verdict.correct ? 'bg-grass text-white' : 'bg-space-red text-white'}`}
+          className={`tile p-3 ${
+            round.verdict.correct || forgivenAt === round.index
+              ? 'bg-grass text-white'
+              : 'bg-space-red text-white'
+          }`}
         >
-          <p className="text-base font-black">{round.verdict.message}</p>
+          <p className="text-base font-black">
+            {forgivenAt === round.index
+              ? '🛡️ Shield spent — that one counts as right'
+              : round.verdict.message}
+          </p>
           {round.verdict.detail !== undefined && (
             <p className="mt-1 text-sm font-medium opacity-90">{round.verdict.detail}</p>
           )}
