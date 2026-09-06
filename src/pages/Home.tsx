@@ -41,6 +41,25 @@ export function Home() {
         </Card>
       </Link>
 
+      <Link to="/party" className="block active:translate-y-1">
+        <Card className="bg-space-blue text-white hover:brightness-110">
+          <div className="flex items-center gap-3">
+            <span className="space flex h-12 w-12 shrink-0 items-center justify-center bg-coin text-2xl" aria-hidden>
+              🎡
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-lg font-bold">Party Run</h2>
+              <p className="text-sm font-semibold opacity-85">
+                Twelve stops. The wheel picks the game, a rule card picks the rules.
+              </p>
+            </div>
+            <span className="text-xl" aria-hidden>
+              ›
+            </span>
+          </div>
+        </Card>
+      </Link>
+
       <Search />
 
       <Link to="/tree" className="block active:translate-y-1">

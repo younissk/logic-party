@@ -10,6 +10,8 @@ import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   AVATAR_STYLES,
+  buyStyle,
+  priceOf,
   levelStanding,
   reroll,
   resetPlayer,
@@ -97,32 +99,51 @@ export function Profile() {
           🎲 Roll a new one
         </Button>
 
-        <p className="mt-4 text-xs font-bold uppercase tracking-wider text-ink-soft">
-          Or pick the art style
-        </p>
-        <div className="mt-2 grid grid-cols-4 gap-2">
-          {AVATAR_STYLES.map((style) => (
-            <button
-              key={style}
-              type="button"
-              onClick={() => setStyle(style)}
-              aria-pressed={style === player.style}
-              title={STYLE_LABELS[style]}
-              className={`tile flex flex-col items-center gap-1 p-1.5
-                focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-coin
-                ${style === player.style ? 'bg-space-blue' : 'bg-card-shade'}`}
-            >
-              <Avatar style={style} seed={player.seed} size={40} name={player.name} />
-              <span
-                className={`w-full truncate text-[0.6rem] font-bold ${
-                  style === player.style ? 'text-white' : 'text-ink-soft'
-                }`}
-              >
-                {STYLE_LABELS[style]}
-              </span>
-            </button>
-          ))}
+        <div className="mt-4 flex items-baseline justify-between gap-3">
+          <p className="text-xs font-bold uppercase tracking-wider text-ink-soft">
+            Or pick the art style
+          </p>
+          <span className="text-sm font-black tabular-nums">🪙 {player.coins}</span>
         </div>
+        <div className="mt-2 grid grid-cols-4 gap-2">
+          {AVATAR_STYLES.map((style) => {
+            const owned = player.owned.includes(style)
+            const price = priceOf(style)
+            const affordable = player.coins >= price
+            return (
+              <button
+                key={style}
+                type="button"
+                onClick={() => (owned ? setStyle(style) : buyStyle(style))}
+                aria-pressed={style === player.style}
+                disabled={!owned && !affordable}
+                title={
+                  owned
+                    ? STYLE_LABELS[style]
+                    : `${STYLE_LABELS[style]} — ${price} coins${affordable ? '' : ', not enough yet'}`
+                }
+                className={`tile flex flex-col items-center gap-1 p-1.5
+                  focus-visible:outline-3 focus-visible:outline-offset-3 focus-visible:outline-coin
+                  ${style === player.style ? 'bg-space-blue' : 'bg-card-shade'}
+                  ${owned ? '' : affordable ? 'ring-3 ring-coin' : 'opacity-55'}`}
+              >
+                <span className={owned ? '' : 'grayscale'}>
+                  <Avatar style={style} seed={player.seed} size={40} name={player.name} />
+                </span>
+                <span
+                  className={`w-full truncate text-[0.6rem] font-bold ${
+                    style === player.style ? 'text-white' : 'text-ink-soft'
+                  }`}
+                >
+                  {owned ? STYLE_LABELS[style] : `🪙 ${price}`}
+                </span>
+              </button>
+            )
+          })}
+        </div>
+        <p className="mt-2 text-xs font-medium text-ink-soft">
+          Coins come from party runs. A style you buy is yours for good.
+        </p>
 
         <p className="mt-3 text-xs font-medium text-ink-soft">
           Drawn by the DiceBear API from that seed. Only the style and the seed are saved, so the

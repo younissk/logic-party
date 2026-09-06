@@ -6,9 +6,10 @@ import {
   parseBackup,
   restoreBackup,
   serialiseBackup,
+  type StoredBackup,
 } from './backup'
 import { clearProgress, getProgress, recordAttempt } from './progress'
-import { awardXp, getPlayer, resetPlayer, setName } from './player'
+import { FREE_STYLES, awardXp, getPlayer, resetPlayer, setName } from './player'
 
 const attempt = (gameId: string, correct: boolean) => ({
   gameId,
@@ -78,7 +79,7 @@ describe('round trip', () => {
         bestTimes: { 'dp:easy': 31_000 },
       },
       player: { version: 1, xp: 0, style: 'bottts', seed: 'zz', name: '' },
-    })
+    } satisfies StoredBackup)
     expect(restoreBackup(saved).ok).toBe(true)
     expect(getProgress().highScores['bcp:hard']).toBe(900)
     expect(getProgress().bestTimes['dp:easy']).toBe(31_000)
@@ -126,5 +127,32 @@ describe('refusing what is not a backup', () => {
     })
     expect(restoreBackup(partial).ok).toBe(true)
     expect(getProgress().attempts).toHaveLength(1)
+  })
+})
+
+describe('a backup written before coins existed', () => {
+  beforeEach(() => {
+    clearProgress()
+    resetPlayer()
+  })
+
+  it('restores, with an empty purse and the free styles', () => {
+    const saved = serialiseBackup({
+      app: 'logic-party',
+      version: 1,
+      exportedAt: '',
+      progress: { version: 1, attempts: [], highScores: {}, bestTimes: {} },
+      player: { version: 1, xp: 420, style: 'lorelei', seed: 'qq', name: 'Old' },
+    } satisfies StoredBackup)
+
+    expect(restoreBackup(saved).ok).toBe(true)
+    const player = getPlayer()
+    expect(player.xp).toBe(420)
+    expect(player.coins).toBe(0)
+    // Version 1 had every style free, so whatever they were wearing has to
+    // survive the update even though it is a paid style now.
+    expect(player.style).toBe('lorelei')
+    expect(player.owned).toContain('lorelei')
+    for (const style of FREE_STYLES) expect(player.owned).toContain(style)
   })
 })

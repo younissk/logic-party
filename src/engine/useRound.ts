@@ -25,8 +25,18 @@ export interface RoundOptions {
   seed: string
   /** Override the sprint length. */
   questionCount?: number
-  /** Skip writing to the progress store — used by the party mode preview. */
+  /** Skip writing to the progress store. */
   practiceOnly?: boolean
+  /**
+   * Move on after a wrong answer instead of demanding a correction.
+   *
+   * Sprint's rule is that you cannot leave a question until it is right, which
+   * is what makes its stopwatch mean something. A party-run stop is the other
+   * shape: a fixed handful of questions, wrong ones simply worth less. This
+   * turns the correction off and with it the time penalty, which exists only
+   * to stop guessing being faster than thinking.
+   */
+  allowWrong?: boolean
 }
 
 /** What the last answer earned or cost, for the feedback banner. */
@@ -95,7 +105,7 @@ export interface RoundState {
 const scoreOf = (verdict: Verdict): number => verdict.score ?? (verdict.correct ? 1 : 0)
 
 export function useRound(options: RoundOptions): RoundState {
-  const { game, difficulty, format, practiceOnly = false } = options
+  const { game, difficulty, format, practiceOnly = false, allowWrong = false } = options
 
   const total =
     format === 'sprint'
@@ -239,7 +249,7 @@ export function useRound(options: RoundOptions): RoundState {
    * costs the real time spent fixing it. That alone is not quite enough of a
    * deterrent — see the note on SCORING.sprintPenaltySeconds.
    */
-  const requireCorrect = format === 'sprint'
+  const requireCorrect = format === 'sprint' && !allowWrong
 
   const finish = useCallback(
     (result: Verdict) => {

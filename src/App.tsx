@@ -2,6 +2,7 @@ import { createBrowserRouter, Outlet } from 'react-router-dom'
 import { Category } from '@/pages/Category'
 import { Guide } from '@/pages/Guide'
 import { Home } from '@/pages/Home'
+import { Party } from '@/pages/Party'
 import { Play } from '@/pages/Play'
 import { Profile } from '@/pages/Profile'
 import { SkillTree } from '@/pages/SkillTree'
@@ -29,6 +30,7 @@ export const router = createBrowserRouter(
         { path: '/category/:categoryId', element: <Category /> },
         { path: '/play/:gameId', element: <Play /> },
         { path: '/guide/:gameId', element: <Guide /> },
+        { path: '/party', element: <Party /> },
         { path: '/tree', element: <SkillTree /> },
         { path: '/me', element: <Profile /> },
       ],

@@ -47,6 +47,27 @@ export const AVATAR_STYLES = [
 
 export type AvatarStyle = (typeof AVATAR_STYLES)[number]
 
+/**
+ * The styles everyone starts with.
+ *
+ * The rest are bought with coins earned in a party run. Four is enough that
+ * rerolling is worth doing on day one, and few enough that there is something
+ * to spend on.
+ */
+export const FREE_STYLES: readonly AvatarStyle[] = AVATAR_STYLES.slice(0, 4)
+
+/**
+ * What a locked style costs.
+ *
+ * A ladder rather than a flat price, so the first purchase lands inside the
+ * first good run and the last one is something to work towards.
+ */
+export function priceOf(style: AvatarStyle): number {
+  const index = AVATAR_STYLES.indexOf(style)
+  if (index < FREE_STYLES.length) return 0
+  return 100 + 25 * (index - FREE_STYLES.length)
+}
+
 const isAvatarStyle = (value: unknown): value is AvatarStyle =>
   typeof value === 'string' && (AVATAR_STYLES as readonly string[]).includes(value)
 
@@ -72,8 +93,13 @@ export function avatarUrl(style: AvatarStyle, seed: string, size = 128): string 
 }
 
 /** A fresh random character. Called once, the first time anyone plays. */
-export function rollAvatar(): { style: AvatarStyle; seed: string } {
-  const style = AVATAR_STYLES[Math.floor(Math.random() * AVATAR_STYLES.length)] as AvatarStyle
+export function rollAvatar(
+  from: readonly AvatarStyle[] = AVATAR_STYLES,
+): { style: AvatarStyle; seed: string } {
+  // An empty pool would roll `undefined`; that can only happen through a
+  // corrupted save, and a free style is a better answer than a crash.
+  const pool = from.length > 0 ? from : FREE_STYLES
+  const style = pool[Math.floor(Math.random() * pool.length)] as AvatarStyle
   const seed = Math.random().toString(36).slice(2, 10)
   return { style, seed }
 }
@@ -180,14 +206,25 @@ export function xpForAnswer({ difficulty, score, combo }: XpContext): number {
 // ---------------------------------------------------------------------------
 
 export interface PlayerState {
-  version: 1
+  version: 2
   xp: number
+  /** Spendable balance, earned in party runs. */
+  coins: number
+  /** Avatar styles unlocked, free ones included. */
+  owned: AvatarStyle[]
   style: AvatarStyle
   seed: string
   name: string
 }
 
-export const emptyPlayer = (): PlayerState => ({ version: 1, xp: 0, ...rollAvatar(), name: '' })
+export const emptyPlayer = (): PlayerState => ({
+  version: 2,
+  xp: 0,
+  coins: 0,
+  owned: [...FREE_STYLES],
+  ...rollAvatar([...FREE_STYLES]),
+  name: '',
+})
 
 function readStorage(): PlayerState {
   try {
@@ -195,11 +232,23 @@ function readStorage(): PlayerState {
     if (!raw) return emptyPlayer()
     const parsed = JSON.parse(raw) as Partial<PlayerState>
     if (typeof parsed !== 'object' || parsed === null) return emptyPlayer()
-    const rolled = rollAvatar()
+    const rolled = rollAvatar([...FREE_STYLES])
+    const style = isAvatarStyle(parsed.style) ? parsed.style : rolled.style
+    // Version 1 had every style free. Whatever someone is already wearing
+    // stays theirs — an update must never confiscate a character.
+    const owned = new Set<AvatarStyle>([...FREE_STYLES, style])
+    if (Array.isArray(parsed.owned)) {
+      for (const entry of parsed.owned) if (isAvatarStyle(entry)) owned.add(entry)
+    }
     return {
-      version: 1,
+      version: 2,
       xp: typeof parsed.xp === 'number' && Number.isFinite(parsed.xp) ? Math.max(0, parsed.xp) : 0,
-      style: isAvatarStyle(parsed.style) ? parsed.style : rolled.style,
+      coins:
+        typeof parsed.coins === 'number' && Number.isFinite(parsed.coins)
+          ? Math.max(0, Math.round(parsed.coins))
+          : 0,
+      owned: [...owned],
+      style,
       seed: typeof parsed.seed === 'string' && parsed.seed !== '' ? parsed.seed : rolled.seed,
       name: typeof parsed.name === 'string' ? parsed.name.slice(0, 24) : '',
     }
@@ -264,14 +313,47 @@ export function awardXp(gained: number): XpAward {
   return { gained, xp, level, leveledUp: level > before }
 }
 
-/** A different character, same level. */
+/** A different character, same level. Rolls only styles you own. */
 export function reroll(): void {
-  commit({ ...state, ...rollAvatar() })
+  commit({ ...state, ...rollAvatar(state.owned) })
 }
 
 /** Keep the face, change the art style — or the other way round. */
 export function setStyle(style: AvatarStyle): void {
+  if (!state.owned.includes(style)) return
   commit({ ...state, style })
+}
+
+// ---------------------------------------------------------------------------
+// Coins
+// ---------------------------------------------------------------------------
+
+/** Bank what a party run paid out. */
+export function earnCoins(amount: number): number {
+  const coins = state.coins + Math.max(0, Math.round(amount))
+  commit({ ...state, coins })
+  return coins
+}
+
+export const owns = (style: AvatarStyle): boolean => state.owned.includes(style)
+
+/**
+ * Buy a style, if it is affordable and not already owned.
+ *
+ * Returns whether anything changed, so the caller can shake the button rather
+ * than silently doing nothing.
+ */
+export function buyStyle(style: AvatarStyle): boolean {
+  if (state.owned.includes(style)) return false
+  const price = priceOf(style)
+  if (state.coins < price) return false
+  commit({
+    ...state,
+    coins: state.coins - price,
+    owned: [...state.owned, style],
+    style,
+  })
+  return true
 }
 
 export function setName(name: string): void {
@@ -284,10 +366,15 @@ export function resetPlayer(): void {
 
 /** Overwrite everything — for restoring a backup. */
 export function replacePlayer(next: PlayerState): void {
+  const style = isAvatarStyle(next.style) ? next.style : state.style
+  const owned = new Set<AvatarStyle>([...FREE_STYLES, style])
+  for (const entry of next.owned ?? []) if (isAvatarStyle(entry)) owned.add(entry)
   commit({
-    version: 1,
+    version: 2,
     xp: Math.max(0, Math.round(next.xp)),
-    style: isAvatarStyle(next.style) ? next.style : state.style,
+    coins: Math.max(0, Math.round(next.coins ?? 0)),
+    owned: [...owned],
+    style,
     seed: next.seed === '' ? state.seed : next.seed,
     name: next.name.slice(0, 24),
   })
